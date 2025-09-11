@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>German OCR Test - EIf des neuen Lebens</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        canvas {
+            border: 1px solid #ccc;
+            margin: 10px 0;
+        }
+        .results {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .log {
+            background: #f8f8f8;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>German OCR Test: "EIf des neuen Lebens"</h1>
+        <p>This test verifies that the German card name "EIf des neuen Lebens" is properly recognized after the OCR improvements.</p>
+
+        <div class="test-section">
+            <h2>Test Image Creation</h2>
+            <button onclick="createTestImage()">Create German Card Image</button>
+            <button onclick="runOCRTest()">Run OCR Test</button>
+            <button onclick="runMultiLanguageTest()">Test Multiple Languages</button>
+            <br>
+            <canvas id="testCanvas" width="800" height="200"></canvas>
+        </div>
+
+        <div class="test-section">
+            <h2>Test Results</h2>
+            <div id="results" class="results">
+                <p>Click "Run OCR Test" to see results</p>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>Debug Log</h2>
+            <button onclick="clearLog()">Clear Log</button>
+            <div id="debugLog" class="log"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import OCRService from './src/ocrService.js';
+        import CameraManager from './src/camera.js';
+
+        let ocrService = new OCRService();
+        let camera = new CameraManager();
+        let testCanvas;
+
+        window.createTestImage = function() {
+            testCanvas = document.getElementById('testCanvas');
+            const ctx = testCanvas.getContext('2d');
+
+            // Clear canvas with light background
+            ctx.fillStyle = '#f0f0f0';
+            ctx.fillRect(0, 0, testCanvas.width, testCanvas.height);
+
+            // Draw the German card name in a clear, readable font
+            ctx.fillStyle = '#000';
+            ctx.font = 'bold 32px Arial';
+            ctx.textAlign = 'center';
+
+            // Main card name
+            ctx.fillText('EIf des neuen Lebens', testCanvas.width / 2, 80);
+
+            // Add mana cost and other details like a real card
+            ctx.font = '18px Arial';
+            ctx.fillText('22', testCanvas.width / 2 + 200, 80);
+
+            // Artist line
+            ctx.font = '12px Arial';
+            ctx.fillText('by RL', testCanvas.width / 2, 120);
+
+            // Add some flavor text with German characters
+            ctx.font = '14px Arial';
+            ctx.fillText('Wenn diese Kreatur ins Spiel kommt...', testCanvas.width / 2, 150);
+
+            log(`Created test image with German card name: "EIf des neuen Lebens"`);
+            log(`Canvas dimensions: ${testCanvas.width}x${testCanvas.height}`);
+        };
+
+        window.runOCRTest = async function() {
+            if (!testCanvas) {
+                log('ERROR: Please create test image first');
+                return;
+            }
+
+            try {
+                log('Starting OCR test for German card name...');
+
+                // Initialize OCR with German language
+                log('Initializing OCR with German language (deu)...');
+                await ocrService.init(null, null, 'deu');
+                log('OCR initialized successfully');
+
+                // Preprocess image using camera manager
+                log('Preprocessing image for OCR...');
+                const processedCanvas = camera.preprocessForOCR(testCanvas);
+                log(`Processed image size: ${processedCanvas.width}x${processedCanvas.height}`);
+
+                // Run OCR recognition
+                log('Running OCR recognition...');
+                const result = await ocrService.recognizeText(processedCanvas);
+                log(`OCR raw result: "${result.text}"`);
+                log(`OCR confidence: ${result.confidence}%`);
+
+                // Extract card names
+                log('Extracting card name suggestions...');
+                const cardSuggestions = ocrService.extractCardNames(result);
+                log(`Found ${cardSuggestions.length} card name suggestions`);
+
+                // Display results
+                let resultsHtml = `
+                    <h3>OCR Results:</h3>
+                    <p><strong>Text:</strong> ${result.text}</p>
+                    <p><strong>Confidence:</strong> ${result.confidence}%</p>
+
+                    <h3>Card Name Suggestions:</h3>
+                `;
+
+                cardSuggestions.forEach((suggestion, index) => {
+                    resultsHtml += `<p>${index + 1}. "${suggestion.text}" (${suggestion.confidence.toFixed(2)}% - ${suggestion.source})</p>`;
+                    log(`Suggestion ${index + 1}: "${suggestion.text}" (${suggestion.confidence.toFixed(2)}% - ${suggestion.source})`);
+                });
+
+                // Check if we got the correct card name
+                const expectedName = "EIf des neuen Lebens";
+                const foundCorrectName = cardSuggestions.some(s =>
+                    s.text.toLowerCase().includes('eif') &&
+                    s.text.toLowerCase().includes('des') &&
+                    s.text.toLowerCase().includes('neuen') &&
+                    s.text.toLowerCase().includes('lebens')
+                );
+
+                if (foundCorrectName) {
+                    resultsHtml += `<div class="success"><strong>✅ SUCCESS:</strong> German card name recognized correctly!</div>`;
+                    log('SUCCESS: German card name recognized correctly!');
+                } else {
+                    resultsHtml += `<div class="error"><strong>❌ ISSUE:</strong> German card name not fully recognized. Expected: "${expectedName}"</div>`;
+                    log(`ISSUE: German card name not fully recognized. Expected: "${expectedName}"`);
+                }
+
+                document.getElementById('results').innerHTML = resultsHtml;
+
+            } catch (error) {
+                const errorMsg = `OCR test failed: ${error.message}`;
+                log(`ERROR: ${errorMsg}`);
+                document.getElementById('results').innerHTML = `<div class="error"><strong>Error:</strong> ${errorMsg}</div>`;
+                console.error('OCR Error:', error);
+            }
+        };
+
+        window.runMultiLanguageTest = async function() {
+            const languages = ['eng', 'deu'];
+
+            if (!testCanvas) {
+                log('ERROR: Please create test image first');
+                return;
+            }
+
+            for (const lang of languages) {
+                try {
+                    log(`\n=== Testing with language: ${lang} ===`);
+
+                    await ocrService.init(null, null, lang);
+                    const processedCanvas = camera.preprocessForOCR(testCanvas);
+                    const result = await ocrService.recognizeText(processedCanvas);
+                    const suggestions = ocrService.extractCardNames(result);
+
+                    log(`Language ${lang}: "${result.text}" (${result.confidence}%)`);
+                    log(`Top suggestion: "${suggestions[0]?.text || 'none'}" (${suggestions[0]?.confidence?.toFixed(2) || 0}%)`);
+
+                } catch (error) {
+                    log(`ERROR with language ${lang}: ${error.message}`);
+                }
+            }
+        };
+
+        window.clearLog = function() {
+            document.getElementById('debugLog').innerHTML = '';
+        };
+
+        function log(message) {
+            const logDiv = document.getElementById('debugLog');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.textContent += `[${timestamp}] ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+
+        // Auto-create test image on load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                createTestImage();
+            }, 100);
+        });
+    </script>
+</body>
+</html>
