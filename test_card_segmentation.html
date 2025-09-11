@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Card Segmentation Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .image-display {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .image-container {
+            text-align: center;
+        }
+        .image-container canvas {
+            border: 2px solid #333;
+            max-width: 300px;
+            max-height: 400px;
+        }
+        .image-container h3 {
+            margin-top: 10px;
+            color: #333;
+        }
+        .controls {
+            margin-bottom: 20px;
+        }
+        .controls button {
+            padding: 10px 20px;
+            margin: 5px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .controls button:hover {
+            background-color: #0056b3;
+        }
+        .controls input[type="file"] {
+            margin: 5px;
+        }
+        .results {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 15px;
+        }
+        .ocr-result {
+            background-color: #e9ecef;
+            padding: 10px;
+            border-radius: 3px;
+            margin: 10px 0;
+            font-family: monospace;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .status.info { background-color: #d1ecf1; color: #0c5460; }
+        .status.success { background-color: #d4edda; color: #155724; }
+        .status.error { background-color: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Magic Card Segmentation Test</h1>
+        <p>This test demonstrates the new card header segmentation for improved OCR text recognition.</p>
+
+        <div class="controls">
+            <input type="file" id="imageInput" accept="image/*">
+            <button onclick="processImage()">Process Image</button>
+            <button onclick="useDefaultCard()">Use Default Card</button>
+        </div>
+
+        <div id="status" class="status info" style="display: none;">Ready to process images...</div>
+
+        <div class="test-section">
+            <h2>Image Processing Results</h2>
+            <div class="image-display" id="imageDisplay">
+                <!-- Images will be displayed here -->
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>OCR Results</h2>
+            <div id="ocrResults" class="results">
+                <p>Select an image to see OCR results...</p>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import CameraManager from './src/camera.js';
+        import OCRService from './src/ocrService.js';
+
+        let camera = new CameraManager();
+        let ocrService = new OCRService();
+        let isOCRInitialized = false;
+
+        // Initialize OCR
+        async function initOCR() {
+            if (isOCRInitialized) return;
+
+            try {
+                showStatus('Initializing OCR...', 'info');
+                await ocrService.init(null, (status) => showStatus(status, 'info'));
+                isOCRInitialized = true;
+                showStatus('OCR initialized successfully', 'success');
+            } catch (error) {
+                showStatus('OCR initialization failed: ' + error.message, 'error');
+            }
+        }
+
+        function showStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            statusDiv.style.display = 'block';
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        async function processImage() {
+            const input = document.getElementById('imageInput');
+            if (!input.files[0]) {
+                showStatus('Please select an image first', 'error');
+                return;
+            }
+
+            await processImageFile(input.files[0]);
+        }
+
+        async function useDefaultCard() {
+            try {
+                const response = await fetch('./assets/default-card.png');
+                const blob = await response.blob();
+                await processImageFile(blob);
+            } catch (error) {
+                showStatus('Could not load default card: ' + error.message, 'error');
+            }
+        }
+
+        async function processImageFile(file) {
+            try {
+                showStatus('Processing image...', 'info');
+
+                // Create image element
+                const img = new Image();
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+
+                img.onload = async function() {
+                    try {
+                        // Draw image to canvas
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        ctx.drawImage(img, 0, 0);
+
+                        // Display original image
+                        displayImage(canvas, 'Original Image');
+
+                        // Process with camera preprocessing
+                        const processedCanvas = camera.preprocessForOCR(canvas);
+                        displayImage(processedCanvas, 'Segmented Header + Processed');
+
+                        // Initialize OCR if needed
+                        await initOCR();
+
+                        if (isOCRInitialized) {
+                            // Perform OCR on segmented header
+                            showStatus('Running OCR on segmented header...', 'info');
+                            const ocrResult = await ocrService.recognizeText(processedCanvas);
+                            displayOCRResults(ocrResult);
+                            showStatus('OCR completed successfully', 'success');
+                        }
+
+                    } catch (error) {
+                        showStatus('Image processing failed: ' + error.message, 'error');
+                    }
+                };
+
+                img.src = URL.createObjectURL(file);
+
+            } catch (error) {
+                showStatus('Failed to process image: ' + error.message, 'error');
+            }
+        }
+
+        function displayImage(canvas, title) {
+            const displayDiv = document.getElementById('imageDisplay');
+
+            const container = document.createElement('div');
+            container.className = 'image-container';
+
+            const displayCanvas = document.createElement('canvas');
+            displayCanvas.width = canvas.width;
+            displayCanvas.height = canvas.height;
+            const displayCtx = displayCanvas.getContext('2d');
+            displayCtx.drawImage(canvas, 0, 0);
+
+            const titleElement = document.createElement('h3');
+            titleElement.textContent = title;
+
+            container.appendChild(displayCanvas);
+            container.appendChild(titleElement);
+            displayDiv.appendChild(container);
+        }
+
+        function displayOCRResults(ocrResult) {
+            const resultsDiv = document.getElementById('ocrResults');
+
+            resultsDiv.innerHTML = `
+                <h3>OCR Results</h3>
+                <div class="ocr-result">
+                    <strong>Recognized Text:</strong><br>
+                    "${ocrResult.text}"
+                </div>
+                <div class="ocr-result">
+                    <strong>Confidence:</strong> ${Math.round(ocrResult.confidence || 0)}%
+                </div>
+                <div class="ocr-result">
+                    <strong>Word Count:</strong> ${ocrResult.words?.length || 0}
+                </div>
+            `;
+
+            if (ocrResult.allResults && ocrResult.allResults.length > 1) {
+                resultsDiv.innerHTML += '<h4>All OCR Attempts:</h4>';
+                ocrResult.allResults.forEach((result, index) => {
+                    resultsDiv.innerHTML += `
+                        <div class="ocr-result">
+                            <strong>Config ${result.config}:</strong><br>
+                            Text: "${result.text}"<br>
+                            Confidence: ${Math.round(result.confidence || 0)}%
+                        </div>
+                    `;
+                });
+            }
+        }
+
+        // Make functions globally available
+        window.processImage = processImage;
+        window.useDefaultCard = useDefaultCard;
+
+        // Initialize on page load
+        showStatus('Page loaded. Ready to test card segmentation.', 'success');
+    </script>
+</body>
+</html>

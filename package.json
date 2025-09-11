@@ -1,0 +1,21 @@
+{
+  "name": "mtgscan",
+  "version": "1.0.0",
+  "description": "Web app to scan Magic: The Gathering cards using device camera and export to Moxfield",
+  "main": "index.html",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "serve": "python3 -m http.server 8080"
+  },
+  "keywords": ["mtg", "magic-the-gathering", "card-scanner", "scryfall", "moxfield"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "vite": "^5.0.0"
+  },
+  "dependencies": {
+    "tesseract.js": "^5.0.0"
+  }
+}

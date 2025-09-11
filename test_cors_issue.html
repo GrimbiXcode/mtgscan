@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CORS Issue Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-container { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+        .error { color: red; }
+        .success { color: green; }
+        img { max-width: 200px; border: 1px solid #ddd; }
+    </style>
+</head>
+<body>
+    <h1>MTG Scanner CORS Issue Test</h1>
+
+    <div class="test-container">
+        <h2>Test 1: External Scryfall Image (CORS Issue Expected)</h2>
+        <p>This should fail to load due to CORS restrictions:</p>
+        <img id="scryfallImage" src="" alt="Scryfall Card Image" onerror="handleImageError('scryfall')" onload="handleImageLoad('scryfall')">
+        <div id="scryfallStatus"></div>
+    </div>
+
+    <div class="test-container">
+        <h2>Test 2: Local Default Image (Should Work)</h2>
+        <p>This should load successfully:</p>
+        <img id="localImage" src="assets/default-card.png" alt="Default Card Image" onerror="handleImageError('local')" onload="handleImageLoad('local')">
+        <div id="localStatus"></div>
+    </div>
+
+    <script>
+        // Test with a real Scryfall image URL
+        const testImageUrl = 'https://c1.scryfall.com/file/scryfall-cards/normal/front/1/0/10cd5fdc-098f-4e57-a8b1-b6c4e0a16b35.jpg?1562857506';
+
+        document.getElementById('scryfallImage').src = testImageUrl;
+
+        function handleImageError(type) {
+            const statusElement = document.getElementById(type + 'Status');
+            statusElement.innerHTML = '<div class="error">❌ Image failed to load - likely due to CORS restrictions</div>';
+
+            if (type === 'scryfall') {
+                console.error('CORS issue confirmed: External Scryfall image failed to load');
+                statusElement.innerHTML += '<p><strong>This confirms the CORS issue!</strong> External Scryfall images cannot be loaded directly.</p>';
+            }
+        }
+
+        function handleImageLoad(type) {
+            const statusElement = document.getElementById(type + 'Status');
+            statusElement.innerHTML = '<div class="success">✅ Image loaded successfully</div>';
+
+            if (type === 'scryfall') {
+                console.log('Scryfall image loaded successfully');
+            }
+        }
+
+        // Additional test: Try to fetch the image programmatically
+        fetch(testImageUrl, { mode: 'no-cors' })
+            .then(response => {
+                console.log('Fetch response:', response);
+                if (response.type === 'opaque') {
+                    console.log('Image can be fetched with no-cors mode for download purposes');
+                }
+            })
+            .catch(error => {
+                console.error('Fetch error:', error);
+            });
+    </script>
+</body>
+</html>

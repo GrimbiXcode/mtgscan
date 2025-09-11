@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR Quality Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-container { margin: 20px 0; padding: 20px; border: 1px solid #ccc; }
+        .result { margin: 10px 0; padding: 10px; background: #f5f5f5; }
+        .error { background: #ffebee; }
+        .success { background: #e8f5e9; }
+        button { padding: 10px 20px; margin: 10px 5px; cursor: pointer; }
+        .image-preview { max-width: 300px; margin: 10px 0; }
+        canvas { border: 1px solid #ddd; margin: 10px; }
+    </style>
+</head>
+<body>
+    <h1>MTG OCR Quality Test</h1>
+
+    <div class="test-container">
+        <h3>Test 1: Upload Image for OCR Testing</h3>
+        <input type="file" id="imageUpload" accept="image/*">
+        <button onclick="testOCR()">Test OCR</button>
+        <div id="uploadedImage"></div>
+
+        <h4>Original Image:</h4>
+        <canvas id="originalCanvas" style="display:none;"></canvas>
+
+        <h4>Processed Image:</h4>
+        <canvas id="processedCanvas" style="display:none;"></canvas>
+
+        <div id="ocrResult" class="result" style="display:none;">
+            <h4>OCR Results:</h4>
+            <p><strong>Raw Text:</strong> <span id="rawText"></span></p>
+            <p><strong>Confidence:</strong> <span id="confidence"></span>%</p>
+            <p><strong>Cleaned Text:</strong> <span id="cleanedText"></span></p>
+            <p><strong>Card Name Suggestions:</strong></p>
+            <ul id="suggestions"></ul>
+        </div>
+    </div>
+
+    <div class="test-container">
+        <h3>Test 2: Synthetic Test Images</h3>
+        <button onclick="createTestCard()">Create Test Card Text</button>
+        <button onclick="testSyntheticOCR()">Test Synthetic OCR</button>
+
+        <canvas id="syntheticCanvas" width="400" height="100"></canvas>
+        <div id="syntheticResult" class="result" style="display:none;"></div>
+    </div>
+
+    <script type="module">
+        import OCRService from './src/ocrService.js';
+        import CameraManager from './src/camera.js';
+
+        let ocrService;
+        let cameraManager;
+
+        // Initialize services
+        async function init() {
+            try {
+                ocrService = new OCRService();
+                cameraManager = new CameraManager();
+
+                console.log('Initializing OCR...');
+                await ocrService.init(
+                    (progress) => console.log('OCR Progress:', progress),
+                    (status) => console.log('OCR Status:', status)
+                );
+                console.log('OCR initialized successfully');
+
+                document.getElementById('ocrStatus').textContent = 'OCR Ready';
+            } catch (error) {
+                console.error('Error initializing OCR:', error);
+                document.getElementById('ocrStatus').textContent = 'OCR Error: ' + error.message;
+            }
+        }
+
+        // Test OCR with uploaded image
+        window.testOCR = async function() {
+            const fileInput = document.getElementById('imageUpload');
+            const file = fileInput.files[0];
+
+            if (!file) {
+                alert('Please select an image file');
+                return;
+            }
+
+            try {
+                // Display original image
+                const img = new Image();
+                img.onload = async function() {
+                    const originalCanvas = document.getElementById('originalCanvas');
+                    const originalCtx = originalCanvas.getContext('2d');
+
+                    originalCanvas.width = img.width;
+                    originalCanvas.height = img.height;
+                    originalCanvas.style.display = 'block';
+                    originalCtx.drawImage(img, 0, 0);
+
+                    // Process image using camera manager preprocessing
+                    const processedCanvas = cameraManager.preprocessForOCR(originalCanvas);
+                    const processedDisplayCanvas = document.getElementById('processedCanvas');
+                    const processedCtx = processedDisplayCanvas.getContext('2d');
+
+                    processedDisplayCanvas.width = processedCanvas.width;
+                    processedDisplayCanvas.height = processedCanvas.height;
+                    processedDisplayCanvas.style.display = 'block';
+                    processedCtx.drawImage(processedCanvas, 0, 0);
+
+                    // Run OCR on processed image
+                    console.log('Running OCR...');
+                    const result = await ocrService.recognizeText(processedCanvas);
+
+                    // Extract card names
+                    const cardNames = ocrService.extractCardNames(result);
+
+                    // Display results
+                    document.getElementById('rawText').textContent = result.text || 'No text detected';
+                    document.getElementById('confidence').textContent = Math.round(result.confidence || 0);
+                    document.getElementById('cleanedText').textContent = ocrService.cleanOCRText(result.text);
+
+                    const suggestionsList = document.getElementById('suggestions');
+                    suggestionsList.innerHTML = '';
+                    cardNames.forEach(name => {
+                        const li = document.createElement('li');
+                        li.textContent = `${name.text} (${Math.round(name.confidence)}% confidence, source: ${name.source})`;
+                        suggestionsList.appendChild(li);
+                    });
+
+                    document.getElementById('ocrResult').style.display = 'block';
+
+                    console.log('OCR Result:', result);
+                    console.log('Card Names:', cardNames);
+                };
+
+                img.src = URL.createObjectURL(file);
+
+            } catch (error) {
+                console.error('OCR Test Error:', error);
+                alert('OCR Test failed: ' + error.message);
+            }
+        };
+
+        // Create synthetic test card
+        window.createTestCard = function() {
+            const canvas = document.getElementById('syntheticCanvas');
+            const ctx = canvas.getContext('2d');
+
+            // Clear canvas
+            ctx.fillStyle = '#f5f5dc'; // Beige background like MTG cards
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Add card name text
+            ctx.fillStyle = '#000000';
+            ctx.font = 'bold 24px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Lightning Bolt', canvas.width / 2, 35);
+
+            // Add some artifacts to simulate real conditions
+            ctx.font = '14px Arial';
+            ctx.fillText('Instant', canvas.width / 2, 60);
+
+            // Add some noise
+            for (let i = 0; i < 50; i++) {
+                ctx.fillStyle = `rgba(0,0,0,0.1)`;
+                ctx.fillRect(Math.random() * canvas.width, Math.random() * canvas.height, 1, 1);
+            }
+        };
+
+        // Test synthetic OCR
+        window.testSyntheticOCR = async function() {
+            const canvas = document.getElementById('syntheticCanvas');
+
+            try {
+                console.log('Testing synthetic OCR...');
+                const result = await ocrService.recognizeText(canvas);
+                const cardNames = ocrService.extractCardNames(result);
+
+                const resultDiv = document.getElementById('syntheticResult');
+                resultDiv.innerHTML = `
+                    <h4>Synthetic OCR Results:</h4>
+                    <p><strong>Raw Text:</strong> ${result.text}</p>
+                    <p><strong>Confidence:</strong> ${Math.round(result.confidence)}%</p>
+                    <p><strong>Expected:</strong> Lightning Bolt</p>
+                    <p><strong>Card Names Found:</strong></p>
+                    <ul>
+                        ${cardNames.map(name => `<li>${name.text} (${Math.round(name.confidence)}%)</li>`).join('')}
+                    </ul>
+                `;
+                resultDiv.style.display = 'block';
+                resultDiv.className = result.text.includes('Lightning') ? 'result success' : 'result error';
+
+            } catch (error) {
+                console.error('Synthetic OCR Error:', error);
+                document.getElementById('syntheticResult').innerHTML = `<p>Error: ${error.message}</p>`;
+                document.getElementById('syntheticResult').className = 'result error';
+                document.getElementById('syntheticResult').style.display = 'block';
+            }
+        };
+
+        // Initialize on load
+        init();
+    </script>
+
+    <div id="initStatus">
+        <p>OCR Status: <span id="ocrStatus">Initializing...</span></p>
+    </div>
+</body>
+</html>

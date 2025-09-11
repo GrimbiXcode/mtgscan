@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MTG Card Scanner</title>
+    <link rel="stylesheet" href="src/styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <h1>🎴 MTG Scanner</h1>
+            <p>Scanne Magic: The Gathering Karten und exportiere sie für Moxfield</p>
+        </header>
+
+        <main>
+            <!-- Camera Section -->
+            <section class="camera-section">
+                <div class="camera-container">
+                    <video id="cameraPreview" autoplay muted playsinline></video>
+                    <canvas id="captureCanvas" style="display: none;"></canvas>
+                    <div id="cardFrame" class="card-frame">
+                        <div class="frame-corner top-left"></div>
+                        <div class="frame-corner top-right"></div>
+                        <div class="frame-corner bottom-left"></div>
+                        <div class="frame-corner bottom-right"></div>
+                        <div class="frame-instructions">
+                            <span>Positioniere die Karte innerhalb des Rahmens</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="camera-controls">
+                    <div class="controls-row">
+                        <button id="startCamera" class="btn btn-primary">📷 Kamera starten</button>
+                        <button id="captureCard" class="btn btn-success" disabled>📸 Karte scannen</button>
+                        <button id="stopCamera" class="btn btn-secondary" disabled>⏹️ Kamera stoppen</button>
+                        <button id="toggleDebug" class="btn btn-info">🔬 Debug Modus</button>
+                    </div>
+                    <div class="settings-row">
+                        <div class="language-setting">
+                            <label for="ocrLanguage">🌐 Kartensprache:</label>
+                            <select id="ocrLanguage" class="language-select">
+                                <option value="eng">English</option>
+                                <option value="deu">Deutsch</option>
+                                <option value="fra">Français</option>
+                                <option value="spa">Español</option>
+                                <option value="ita">Italiano</option>
+                                <option value="por">Português</option>
+                                <option value="jpn">日本語</option>
+                                <option value="kor">한국어</option>
+                                <option value="chi_sim">中文 (简体)</option>
+                                <option value="chi_tra">中文 (繁體)</option>
+                                <option value="rus">Русский</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Processing Status -->
+            <section class="status-section">
+                <div id="processingStatus" class="status-message" style="display: none;">
+                    <div class="spinner"></div>
+                    <span id="statusText">Karte wird verarbeitet...</span>
+                </div>
+
+                <!-- OCR Progress -->
+                <div id="ocrProgress" class="ocr-progress" style="display: none;">
+                    <div class="progress-info">
+                        <span id="ocrStatusText">OCR wird initialisiert...</span>
+                        <span id="ocrPercentage">0%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div id="progressFill" class="progress-fill"></div>
+                    </div>
+                </div>
+
+                <!-- OCR Result Preview -->
+                <div id="ocrResults" class="ocr-results" style="display: none;">
+                    <h3>Erkannter Text:</h3>
+                    <div id="recognizedText" class="recognized-text"></div>
+                    <div id="cardNameSuggestions" class="card-suggestions">
+                        <h4>Mögliche Kartennamen:</h4>
+                        <div id="suggestionsList" class="suggestions-list"></div>
+                    </div>
+                    <div class="ocr-actions">
+                        <button id="acceptOCR" class="btn btn-success">✓ Automatisch verwenden</button>
+                        <button id="manualInput" class="btn btn-secondary">✏️ Manuell eingeben</button>
+                        <button id="retryOCR" class="btn btn-warning">🔄 OCR wiederholen</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Debug Panel -->
+            <section id="debugSection" class="debug-section" style="display: none;">
+                <div class="debug-header">
+                    <h2>🔬 Debug Modus - OCR Analyse</h2>
+                    <button id="closeDebug" class="btn btn-secondary">Debug schließen</button>
+                </div>
+
+                <div class="debug-content">
+                    <div class="debug-images">
+                        <div class="debug-image-container">
+                            <h4>Originalbild</h4>
+                            <canvas id="debugOriginalCanvas" class="debug-canvas"></canvas>
+                            <button id="downloadOriginal" class="btn btn-small">💾 Herunterladen</button>
+                        </div>
+
+                        <div class="debug-image-container">
+                            <h4>Verarbeitetes Bild</h4>
+                            <canvas id="debugProcessedCanvas" class="debug-canvas"></canvas>
+                            <button id="downloadProcessed" class="btn btn-small">💾 Herunterladen</button>
+                        </div>
+                    </div>
+
+                    <div class="debug-results">
+                        <h4>OCR Ergebnisse</h4>
+                        <div id="debugOCRResults" class="debug-ocr-results">
+                            <p>Keine OCR-Ergebnisse verfügbar. Scanne eine Karte, um die Analyse zu sehen.</p>
+                        </div>
+
+                        <div class="debug-processing-steps">
+                            <h4>Verarbeitungsschritte</h4>
+                            <div id="debugProcessingLog" class="debug-log">
+                                <p>Debug-Log wird hier angezeigt...</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="debug-settings">
+                        <h4>OCR Einstellungen</h4>
+                        <div class="debug-controls">
+                            <label>
+                                <input type="checkbox" id="useAllConfigs" checked>
+                                Alle OCR-Konfigurationen verwenden
+                            </label>
+                            <label>
+                                <input type="checkbox" id="showIntermediateSteps" checked>
+                                Zwischenschritte anzeigen
+                            </label>
+                            <button id="retestOCR" class="btn btn-warning">🔄 OCR erneut testen</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Card Collection -->
+            <section class="collection-section">
+                <div class="collection-header">
+                    <h2>Gescannte Karten (<span id="cardCount">0</span>)</h2>
+                    <div class="collection-controls">
+                        <button id="clearCollection" class="btn btn-warning">🗑️ Alle löschen</button>
+                        <button id="exportCSV" class="btn btn-success">📊 Als CSV exportieren</button>
+                    </div>
+                </div>
+
+                <div id="cardList" class="card-list">
+                    <div class="empty-state">
+                        <p>Noch keine Karten gescannt. Verwende die Kamera, um zu beginnen!</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Card Detail Modal -->
+    <div id="cardModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalCardName">Kartenname</h3>
+                <button id="closeModal" class="btn btn-close">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="card-detail">
+                    <img id="modalCardImage" src="" alt="Card Image">
+                    <div class="card-info">
+                        <p><strong>Set:</strong> <span id="modalCardSet"></span></p>
+                        <p><strong>Typ:</strong> <span id="modalCardType"></span></p>
+                        <p><strong>Mana Cost:</strong> <span id="modalCardCost"></span></p>
+                        <div class="quantity-control">
+                            <label for="cardQuantity">Anzahl:</label>
+                            <input type="number" id="cardQuantity" min="1" max="99" value="1">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="saveCardChanges" class="btn btn-primary">Speichern</button>
+                <button id="deleteCard" class="btn btn-danger">Karte löschen</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="src/main.js"></script>
+</body>
+</html>
