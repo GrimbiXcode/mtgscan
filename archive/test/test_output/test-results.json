@@ -1,0 +1,122 @@
+[
+  {
+    "imagePath": "/Users/davidgrimbichler/gitlabor/mtgscan/test_images/german/Elf des neuen Lebens.jpeg",
+    "expectedName": "Elf des neuen Lebens",
+    "results": [
+      {
+        "config": "primary",
+        "rawText": "ERS VNA Lh x TE GA Se Zr a ERs PTAC Dy Re\n\na yp ig aE PN Nae\n\nNEUEN\nMa TT CRETE 5% fe\ni TET i Co EEE SEC N %\n. Re a Tree im. ee\nra\n% | EIf des neuen Lebens cee ) |\n",
+        "cleanedText": "ERS VNA Lh x TE GA Se Zr a ERs PTAC Dy Re a yp ig ä PN Nä NEüN Ma TT CRETE 5 fe i TET i Co EEE SEC N . Re a Tree im. ee ra EIf des neün Lebens cee",
+        "confidence": 33,
+        "similarity": 0.1232876712328767,
+        "success": false
+      },
+      {
+        "config": "enhanced",
+        "rawText": "ERS VNA Lh x TE GA Se Zr a ERs PTAC Dy Re\n\na yp ig aE PN Nae\n\nNEUEN\nMa TT CRETE 5% fe\ni TET i Co EEE SEC N %\n. Re a Tree im. ee\nra\n% | EIf des neuen Lebens cee ) |\n",
+        "cleanedText": "ERS VNA Lh x TE GA Se Zr a ERs PTAC Dy Re a yp ig ä PN Nä NEüN Ma TT CRETE 5 fe i TET i Co EEE SEC N . Re a Tree im. ee ra EIf des neün Lebens cee",
+        "confidence": 33,
+        "similarity": 0.1232876712328767,
+        "success": false
+      },
+      {
+        "config": "aggressive",
+        "rawText": "ERS VNA Lh x TE GA Se Zr a ERs PTAC Dy Re\n\na yp ig aE PN Nae\n\nNEUEN\nMa TT CRETE 5% fe\ni TET i Co EEE SEC N %\n. Re a Tree im. ee\nra\n% | EIf des neuen Lebens cee ) |\n",
+        "cleanedText": "ERS VNA Lh x TE GA Se Zr a ERs PTAC Dy Re a yp ig ä PN Nä NEüN Ma TT CRETE 5 fe i TET i Co EEE SEC N . Re a Tree im. ee ra EIf des neün Lebens cee",
+        "confidence": 33,
+        "similarity": 0.1232876712328767,
+        "success": false
+      }
+    ],
+    "bestResult": {
+      "config": "primary",
+      "rawText": "ERS VNA Lh x TE GA Se Zr a ERs PTAC Dy Re\n\na yp ig aE PN Nae\n\nNEUEN\nMa TT CRETE 5% fe\ni TET i Co EEE SEC N %\n. Re a Tree im. ee\nra\n% | EIf des neuen Lebens cee ) |\n",
+      "cleanedText": "ERS VNA Lh x TE GA Se Zr a ERs PTAC Dy Re a yp ig ä PN Nä NEüN Ma TT CRETE 5 fe i TET i Co EEE SEC N . Re a Tree im. ee ra EIf des neün Lebens cee",
+      "confidence": 33,
+      "similarity": 0.1232876712328767,
+      "success": false
+    },
+    "totalTime": 7800,
+    "overallSuccess": false
+  },
+  {
+    "imagePath": "/Users/davidgrimbichler/gitlabor/mtgscan/test_images/german/Wappenbanner.jpeg",
+    "expectedName": "Wappenbanner",
+    "results": [
+      {
+        "config": "primary",
+        "rawText": "wn ay & OTN RI TIN ABN Lk LV ail iF ut) Sed SN A LP\na AE SAG Sten a NR Sr To ee RE hs 2 SUSNAO TRIN A 0 ed BR AE Cr nar }\n4 X N a rE DNA Ha alt EN MO Lr Re gle 2 AE\nx Pe DUS NE NO RA AN TE AA #77 KT\nRAT ON ESN RIA AR SC ar mi So Be ZI Ay EA Pia bn Kg WR ea vs\nNG ARE IA Bh CAR A oe 2 Dr Sp pio WEARER RE id DD A TARA\nPRAT da ad SERRE RNIN vp Bebb RL EAE RI AR A be GTP 8\nPRES PRN CAR EE Sl GEN REQ Fn ONE RR INNA ae CX CRB KT ERPs aot\nze 2 REARS TR RAD eT HA TRE EE A LR BV OG 8 a Word ev sy\n| # Hei CENA Yok 4 PS Rt Sho AN A RIKER Sib dh Dh NE I A\n2 i YN Se AAR fe dH EA SR Rd MOI AN U NO %\nUR eh aie SiS aT Bd TA P<\nShi Rl AE SRR A tN A Bk A NI RL A Rm LEE SS A AT\nX SNA At N ASS BR pa EN A CE EN SEELE\n0 : io: NT Ny A pd TR IR RRS AN Sr es TTR a AR A\nARR X A CAB 8 RIN EN TR NAT NEED REAR Se\n- + - be 3 A AS Rover A U A EN De Ta WAL >\nLER EN EAR CE aA er pre ek NINES SO dy BIR | eh AT Ag) gh\nCS FeAl x EOE ANCA Ak ARB AU BAT al 3 LL TAN SRS Bel i\nRE ¥ BE NPN FAA Why APN A ge a AE A\nXS © > WH TT ation FAR IAA See WIA ALS SR eT Lt AN Ae\nWw 3 ERY 3 Ea a Lo Te a A I Epis Gl NE nts A EA\nSs Sr HOSEN A STS IE\n5 + : By NG a ars 2 RR OR A CAD 5 lH 0\npe a el WIA DE VD\n: hi Th ry A Le ST a eA Lay A SEE\na AE NE OL CRON Ah ARR NFER, 8 holy 7\nVO So ol CRIA 227 AR\nN d SAA BS PH SG Ign\n= LPs D7 GE SE\n: PP COA et a Deh BT\nSS A 2 5 A EBA J\n3 SR ‘ MEAS AZ\nCE Lis EWES wt Sr op ET DE A RASA II SLE A\n2 Sn { W; b 3 PAN\n2 pts a r Sa EA SEE PC\n7? x Xie ar ppen anne = A er Ra ANGI ad TAPAS\n— —— zZ fo Rd 5 Ps RAD IRN BPE lL BLN\nSs e he; lL VE rm re i RTT ————— |\n",
+        "cleanedText": "wn ay OTN RI TIN ABN Lk LV ail iF ut Sed SN A LP a ä SAG Sten a NR Sr To ee RE hs 2 SUSNAO TRIN A 0 ed BR ä Cr nar 4 X N a rE DNA Ha alt EN MO Lr Re gle 2 ä x Pe DUS NE NO RA AN TE AA 77 KT RAT ON ESN RIA AR SC ar mi So Be ZI Ay EA Pia bn Kg WR ea vs NG ARE IA Bh CAR A ö 2 Dr Sp pio WEARER RE id DD A TARA PRAT da ad SERRE RNIN vp Bebb RL Eä RI AR A be GTP 8 PRES PRN CAR EE Sl GEN REQ Fn ONE RR INNA ä CX CRB KT ERPs aot ze 2 REARS TR RAD eT HA TRE EE A LR BV OG 8 a Word ev sy Hei CENA Yok 4 PS Rt Sho AN A RIKER Sib dh Dh NE I A 2 i YN Se AAR fe dH EA SR Rd MOI AN U NO UR eh aie SiS aT Bd TA P Shi Rl ä SRR A tN A Bk A NI RL A Rm LEE SS A AT X SNA At N ASS BR pa EN A CE EN SEELE 0 : io: NT Ny A pd TR IR RRS AN Sr es TTR a AR A ARR X A CAB 8 RIN EN TR NAT NEED REAR Se--be 3 A AS Rover A U A EN De Ta WAL LER EN EAR CE aA er pre ek NINES SO dy BIR eh AT Ag gh CS FeAl x Eö ANCA Ak ARB AU BAT al 3 LL TAN SRS Bel i RE BE NPN FAA Why APN A ge a ä A XS WH TT ation FAR IAA See WIA ALS SR eT Lt AN ä Ww 3 ERY 3 Ea a Lo Te a A I Epis Gl NE nts A EA Ss Sr HOSEN A STS IE 5 : By NG a ars 2 RR OR A CAD 5 lH 0 pe a el WIA DE VD : hi Th ry A Le ST a eA Lay A SEE a ä NE OL CRON Ah ARR NFER, 8 holy 7 VO So ol CRIA 227 AR N d SAA BS PH SG Ign LPs D7 GE SE : PP COA et a Deh BT SS A 2 5 A EBA J 3 SR MEAS AZ CE Lis EWES wt Sr op ET DE A RASA II SLE A 2 Sn W; b 3 PAN 2 pts a r Sa EA SEE PC 7? x Xie ar ppen anne A er Ra ANGI ad TAPAS zZ fo Rd 5 Ps RAD IRN BPE lL BLN Ss e he; lL VE rm re i RTT",
+        "confidence": 23,
+        "similarity": 0.008064516129032258,
+        "success": false
+      },
+      {
+        "config": "enhanced",
+        "rawText": "wn ay & OTN RI TIN ABN Lk LV ail iF ut) Sed SN A LP\na AE SAG Sten a NR Sr To ee RE hs 2 SUSNAO TRIN A 0 ed BR AE Cr nar }\n4 X N a rE DNA Ha alt EN MO Lr Re gle 2 AE\nx Pe DUS NE NO RA AN TE AA #77 KT\nRAT ON ESN RIA AR SC ar mi So Be ZI Ay EA Pia bn Kg WR ea vs\nNG ARE IA Bh CAR A oe 2 Dr Sp pio WEARER RE id DD A TARA\nPRAT da ad SERRE RNIN vp Bebb RL EAE RI AR A be GTP 8\nPRES PRN CAR EE Sl GEN REQ Fn ONE RR INNA ae CX CRB KT ERPs aot\nze 2 REARS TR RAD eT HA TRE EE A LR BV OG 8 a Word ev sy\n| # Hei CENA Yok 4 PS Rt Sho AN A RIKER Sib dh Dh NE I A\n2 i YN Se AAR fe dH EA SR Rd MOI AN U NO %\nUR eh aie SiS aT Bd TA P<\nShi Rl AE SRR A tN A Bk A NI RL A Rm LEE SS A AT\nX SNA At N ASS BR pa EN A CE EN SEELE\n0 : io: NT Ny A pd TR IR RRS AN Sr es TTR a AR A\nARR X A CAB 8 RIN EN TR NAT NEED REAR Se\n- + - be 3 A AS Rover A U A EN De Ta WAL >\nLER EN EAR CE aA er pre ek NINES SO dy BIR | eh AT Ag) gh\nCS FeAl x EOE ANCA Ak ARB AU BAT al 3 LL TAN SRS Bel i\nRE ¥ BE NPN FAA Why APN A ge a AE A\nXS © > WH TT ation FAR IAA See WIA ALS SR eT Lt AN Ae\nWw 3 ERY 3 Ea a Lo Te a A I Epis Gl NE nts A EA\nSs Sr HOSEN A STS IE\n5 + : By NG a ars 2 RR OR A CAD 5 lH 0\npe a el WIA DE VD\n: hi Th ry A Le ST a eA Lay A SEE\na AE NE OL CRON Ah ARR NFER, 8 holy 7\nVO So ol CRIA 227 AR\nN d SAA BS PH SG Ign\n= LPs D7 GE SE\n: PP COA et a Deh BT\nSS A 2 5 A EBA J\n3 SR ‘ MEAS AZ\nCE Lis EWES wt Sr op ET DE A RASA II SLE A\n2 Sn { W; b 3 PAN\n2 pts a r Sa EA SEE PC\n7? x Xie ar ppen anne = A er Ra ANGI ad TAPAS\n— —— zZ fo Rd 5 Ps RAD IRN BPE lL BLN\nSs e he; lL VE rm re i RTT ————— |\n",
+        "cleanedText": "wn ay OTN RI TIN ABN Lk LV ail iF ut Sed SN A LP a ä SAG Sten a NR Sr To ee RE hs 2 SUSNAO TRIN A 0 ed BR ä Cr nar 4 X N a rE DNA Ha alt EN MO Lr Re gle 2 ä x Pe DUS NE NO RA AN TE AA 77 KT RAT ON ESN RIA AR SC ar mi So Be ZI Ay EA Pia bn Kg WR ea vs NG ARE IA Bh CAR A ö 2 Dr Sp pio WEARER RE id DD A TARA PRAT da ad SERRE RNIN vp Bebb RL Eä RI AR A be GTP 8 PRES PRN CAR EE Sl GEN REQ Fn ONE RR INNA ä CX CRB KT ERPs aot ze 2 REARS TR RAD eT HA TRE EE A LR BV OG 8 a Word ev sy Hei CENA Yok 4 PS Rt Sho AN A RIKER Sib dh Dh NE I A 2 i YN Se AAR fe dH EA SR Rd MOI AN U NO UR eh aie SiS aT Bd TA P Shi Rl ä SRR A tN A Bk A NI RL A Rm LEE SS A AT X SNA At N ASS BR pa EN A CE EN SEELE 0 : io: NT Ny A pd TR IR RRS AN Sr es TTR a AR A ARR X A CAB 8 RIN EN TR NAT NEED REAR Se--be 3 A AS Rover A U A EN De Ta WAL LER EN EAR CE aA er pre ek NINES SO dy BIR eh AT Ag gh CS FeAl x Eö ANCA Ak ARB AU BAT al 3 LL TAN SRS Bel i RE BE NPN FAA Why APN A ge a ä A XS WH TT ation FAR IAA See WIA ALS SR eT Lt AN ä Ww 3 ERY 3 Ea a Lo Te a A I Epis Gl NE nts A EA Ss Sr HOSEN A STS IE 5 : By NG a ars 2 RR OR A CAD 5 lH 0 pe a el WIA DE VD : hi Th ry A Le ST a eA Lay A SEE a ä NE OL CRON Ah ARR NFER, 8 holy 7 VO So ol CRIA 227 AR N d SAA BS PH SG Ign LPs D7 GE SE : PP COA et a Deh BT SS A 2 5 A EBA J 3 SR MEAS AZ CE Lis EWES wt Sr op ET DE A RASA II SLE A 2 Sn W; b 3 PAN 2 pts a r Sa EA SEE PC 7? x Xie ar ppen anne A er Ra ANGI ad TAPAS zZ fo Rd 5 Ps RAD IRN BPE lL BLN Ss e he; lL VE rm re i RTT",
+        "confidence": 23,
+        "similarity": 0.008064516129032258,
+        "success": false
+      },
+      {
+        "config": "aggressive",
+        "rawText": "wn ay & OTN RI TIN ABN Lk LV ail iF ut) Sed SN A LP\na AE SAG Sten a NR Sr To ee RE hs 2 SUSNAO TRIN A 0 ed BR AE Cr nar }\n4 X N a rE DNA Ha alt EN MO Lr Re gle 2 AE\nx Pe DUS NE NO RA AN TE AA #77 KT\nRAT ON ESN RIA AR SC ar mi So Be ZI Ay EA Pia bn Kg WR ea vs\nNG ARE IA Bh CAR A oe 2 Dr Sp pio WEARER RE id DD A TARA\nPRAT da ad SERRE RNIN vp Bebb RL EAE RI AR A be GTP 8\nPRES PRN CAR EE Sl GEN REQ Fn ONE RR INNA ae CX CRB KT ERPs aot\nze 2 REARS TR RAD eT HA TRE EE A LR BV OG 8 a Word ev sy\n| # Hei CENA Yok 4 PS Rt Sho AN A RIKER Sib dh Dh NE I A\n2 i YN Se AAR fe dH EA SR Rd MOI AN U NO %\nUR eh aie SiS aT Bd TA P<\nShi Rl AE SRR A tN A Bk A NI RL A Rm LEE SS A AT\nX SNA At N ASS BR pa EN A CE EN SEELE\n0 : io: NT Ny A pd TR IR RRS AN Sr es TTR a AR A\nARR X A CAB 8 RIN EN TR NAT NEED REAR Se\n- + - be 3 A AS Rover A U A EN De Ta WAL >\nLER EN EAR CE aA er pre ek NINES SO dy BIR | eh AT Ag) gh\nCS FeAl x EOE ANCA Ak ARB AU BAT al 3 LL TAN SRS Bel i\nRE ¥ BE NPN FAA Why APN A ge a AE A\nXS © > WH TT ation FAR IAA See WIA ALS SR eT Lt AN Ae\nWw 3 ERY 3 Ea a Lo Te a A I Epis Gl NE nts A EA\nSs Sr HOSEN A STS IE\n5 + : By NG a ars 2 RR OR A CAD 5 lH 0\npe a el WIA DE VD\n: hi Th ry A Le ST a eA Lay A SEE\na AE NE OL CRON Ah ARR NFER, 8 holy 7\nVO So ol CRIA 227 AR\nN d SAA BS PH SG Ign\n= LPs D7 GE SE\n: PP COA et a Deh BT\nSS A 2 5 A EBA J\n3 SR ‘ MEAS AZ\nCE Lis EWES wt Sr op ET DE A RASA II SLE A\n2 Sn { W; b 3 PAN\n2 pts a r Sa EA SEE PC\n7? x Xie ar ppen anne = A er Ra ANGI ad TAPAS\n— —— zZ fo Rd 5 Ps RAD IRN BPE lL BLN\nSs e he; lL VE rm re i RTT ————— |\n",
+        "cleanedText": "wn ay OTN RI TIN ABN Lk LV ail iF ut Sed SN A LP a ä SAG Sten a NR Sr To ee RE hs 2 SUSNAO TRIN A 0 ed BR ä Cr nar 4 X N a rE DNA Ha alt EN MO Lr Re gle 2 ä x Pe DUS NE NO RA AN TE AA 77 KT RAT ON ESN RIA AR SC ar mi So Be ZI Ay EA Pia bn Kg WR ea vs NG ARE IA Bh CAR A ö 2 Dr Sp pio WEARER RE id DD A TARA PRAT da ad SERRE RNIN vp Bebb RL Eä RI AR A be GTP 8 PRES PRN CAR EE Sl GEN REQ Fn ONE RR INNA ä CX CRB KT ERPs aot ze 2 REARS TR RAD eT HA TRE EE A LR BV OG 8 a Word ev sy Hei CENA Yok 4 PS Rt Sho AN A RIKER Sib dh Dh NE I A 2 i YN Se AAR fe dH EA SR Rd MOI AN U NO UR eh aie SiS aT Bd TA P Shi Rl ä SRR A tN A Bk A NI RL A Rm LEE SS A AT X SNA At N ASS BR pa EN A CE EN SEELE 0 : io: NT Ny A pd TR IR RRS AN Sr es TTR a AR A ARR X A CAB 8 RIN EN TR NAT NEED REAR Se--be 3 A AS Rover A U A EN De Ta WAL LER EN EAR CE aA er pre ek NINES SO dy BIR eh AT Ag gh CS FeAl x Eö ANCA Ak ARB AU BAT al 3 LL TAN SRS Bel i RE BE NPN FAA Why APN A ge a ä A XS WH TT ation FAR IAA See WIA ALS SR eT Lt AN ä Ww 3 ERY 3 Ea a Lo Te a A I Epis Gl NE nts A EA Ss Sr HOSEN A STS IE 5 : By NG a ars 2 RR OR A CAD 5 lH 0 pe a el WIA DE VD : hi Th ry A Le ST a eA Lay A SEE a ä NE OL CRON Ah ARR NFER, 8 holy 7 VO So ol CRIA 227 AR N d SAA BS PH SG Ign LPs D7 GE SE : PP COA et a Deh BT SS A 2 5 A EBA J 3 SR MEAS AZ CE Lis EWES wt Sr op ET DE A RASA II SLE A 2 Sn W; b 3 PAN 2 pts a r Sa EA SEE PC 7? x Xie ar ppen anne A er Ra ANGI ad TAPAS zZ fo Rd 5 Ps RAD IRN BPE lL BLN Ss e he; lL VE rm re i RTT",
+        "confidence": 23,
+        "similarity": 0.008064516129032258,
+        "success": false
+      }
+    ],
+    "bestResult": {
+      "config": "primary",
+      "rawText": "wn ay & OTN RI TIN ABN Lk LV ail iF ut) Sed SN A LP\na AE SAG Sten a NR Sr To ee RE hs 2 SUSNAO TRIN A 0 ed BR AE Cr nar }\n4 X N a rE DNA Ha alt EN MO Lr Re gle 2 AE\nx Pe DUS NE NO RA AN TE AA #77 KT\nRAT ON ESN RIA AR SC ar mi So Be ZI Ay EA Pia bn Kg WR ea vs\nNG ARE IA Bh CAR A oe 2 Dr Sp pio WEARER RE id DD A TARA\nPRAT da ad SERRE RNIN vp Bebb RL EAE RI AR A be GTP 8\nPRES PRN CAR EE Sl GEN REQ Fn ONE RR INNA ae CX CRB KT ERPs aot\nze 2 REARS TR RAD eT HA TRE EE A LR BV OG 8 a Word ev sy\n| # Hei CENA Yok 4 PS Rt Sho AN A RIKER Sib dh Dh NE I A\n2 i YN Se AAR fe dH EA SR Rd MOI AN U NO %\nUR eh aie SiS aT Bd TA P<\nShi Rl AE SRR A tN A Bk A NI RL A Rm LEE SS A AT\nX SNA At N ASS BR pa EN A CE EN SEELE\n0 : io: NT Ny A pd TR IR RRS AN Sr es TTR a AR A\nARR X A CAB 8 RIN EN TR NAT NEED REAR Se\n- + - be 3 A AS Rover A U A EN De Ta WAL >\nLER EN EAR CE aA er pre ek NINES SO dy BIR | eh AT Ag) gh\nCS FeAl x EOE ANCA Ak ARB AU BAT al 3 LL TAN SRS Bel i\nRE ¥ BE NPN FAA Why APN A ge a AE A\nXS © > WH TT ation FAR IAA See WIA ALS SR eT Lt AN Ae\nWw 3 ERY 3 Ea a Lo Te a A I Epis Gl NE nts A EA\nSs Sr HOSEN A STS IE\n5 + : By NG a ars 2 RR OR A CAD 5 lH 0\npe a el WIA DE VD\n: hi Th ry A Le ST a eA Lay A SEE\na AE NE OL CRON Ah ARR NFER, 8 holy 7\nVO So ol CRIA 227 AR\nN d SAA BS PH SG Ign\n= LPs D7 GE SE\n: PP COA et a Deh BT\nSS A 2 5 A EBA J\n3 SR ‘ MEAS AZ\nCE Lis EWES wt Sr op ET DE A RASA II SLE A\n2 Sn { W; b 3 PAN\n2 pts a r Sa EA SEE PC\n7? x Xie ar ppen anne = A er Ra ANGI ad TAPAS\n— —— zZ fo Rd 5 Ps RAD IRN BPE lL BLN\nSs e he; lL VE rm re i RTT ————— |\n",
+      "cleanedText": "wn ay OTN RI TIN ABN Lk LV ail iF ut Sed SN A LP a ä SAG Sten a NR Sr To ee RE hs 2 SUSNAO TRIN A 0 ed BR ä Cr nar 4 X N a rE DNA Ha alt EN MO Lr Re gle 2 ä x Pe DUS NE NO RA AN TE AA 77 KT RAT ON ESN RIA AR SC ar mi So Be ZI Ay EA Pia bn Kg WR ea vs NG ARE IA Bh CAR A ö 2 Dr Sp pio WEARER RE id DD A TARA PRAT da ad SERRE RNIN vp Bebb RL Eä RI AR A be GTP 8 PRES PRN CAR EE Sl GEN REQ Fn ONE RR INNA ä CX CRB KT ERPs aot ze 2 REARS TR RAD eT HA TRE EE A LR BV OG 8 a Word ev sy Hei CENA Yok 4 PS Rt Sho AN A RIKER Sib dh Dh NE I A 2 i YN Se AAR fe dH EA SR Rd MOI AN U NO UR eh aie SiS aT Bd TA P Shi Rl ä SRR A tN A Bk A NI RL A Rm LEE SS A AT X SNA At N ASS BR pa EN A CE EN SEELE 0 : io: NT Ny A pd TR IR RRS AN Sr es TTR a AR A ARR X A CAB 8 RIN EN TR NAT NEED REAR Se--be 3 A AS Rover A U A EN De Ta WAL LER EN EAR CE aA er pre ek NINES SO dy BIR eh AT Ag gh CS FeAl x Eö ANCA Ak ARB AU BAT al 3 LL TAN SRS Bel i RE BE NPN FAA Why APN A ge a ä A XS WH TT ation FAR IAA See WIA ALS SR eT Lt AN ä Ww 3 ERY 3 Ea a Lo Te a A I Epis Gl NE nts A EA Ss Sr HOSEN A STS IE 5 : By NG a ars 2 RR OR A CAD 5 lH 0 pe a el WIA DE VD : hi Th ry A Le ST a eA Lay A SEE a ä NE OL CRON Ah ARR NFER, 8 holy 7 VO So ol CRIA 227 AR N d SAA BS PH SG Ign LPs D7 GE SE : PP COA et a Deh BT SS A 2 5 A EBA J 3 SR MEAS AZ CE Lis EWES wt Sr op ET DE A RASA II SLE A 2 Sn W; b 3 PAN 2 pts a r Sa EA SEE PC 7? x Xie ar ppen anne A er Ra ANGI ad TAPAS zZ fo Rd 5 Ps RAD IRN BPE lL BLN Ss e he; lL VE rm re i RTT",
+      "confidence": 23,
+      "similarity": 0.008064516129032258,
+      "success": false
+    },
+    "totalTime": 41756,
+    "overallSuccess": false
+  },
+  {
+    "imagePath": "/Users/davidgrimbichler/gitlabor/mtgscan/test_images/german/Wächter des Kreislaufs.jpeg",
+    "expectedName": "Wächter des Kreislaufs",
+    "results": [
+      {
+        "config": "primary",
+        "rawText": "A Vad ng 1 MM {= 1 /\nLY -\n4 Wächter des Kreislaufs 15ER\n# | END WA yey 7\n",
+        "cleanedText": "A Vad ng 1 MM 1 / LY-4 Wächter des Kreislaufs 15ER END WA yey 7",
+        "confidence": 52,
+        "similarity": 0.3333333333333333,
+        "success": false
+      },
+      {
+        "config": "enhanced",
+        "rawText": "A Vad ng 1 MM {= 1 /\nLY -\n4 Wächter des Kreislaufs 15ER\n# | END WA yey 7\n",
+        "cleanedText": "A Vad ng 1 MM 1 / LY-4 Wächter des Kreislaufs 15ER END WA yey 7",
+        "confidence": 52,
+        "similarity": 0.3333333333333333,
+        "success": false
+      },
+      {
+        "config": "aggressive",
+        "rawText": "A Vad ng 1 MM {= 1 /\nLY -\n4 Wächter des Kreislaufs 15ER\n# | END WA yey 7\n",
+        "cleanedText": "A Vad ng 1 MM 1 / LY-4 Wächter des Kreislaufs 15ER END WA yey 7",
+        "confidence": 52,
+        "similarity": 0.3333333333333333,
+        "success": false
+      }
+    ],
+    "bestResult": {
+      "config": "primary",
+      "rawText": "A Vad ng 1 MM {= 1 /\nLY -\n4 Wächter des Kreislaufs 15ER\n# | END WA yey 7\n",
+      "cleanedText": "A Vad ng 1 MM 1 / LY-4 Wächter des Kreislaufs 15ER END WA yey 7",
+      "confidence": 52,
+      "similarity": 0.3333333333333333,
+      "success": false
+    },
+    "totalTime": 3040,
+    "overallSuccess": false
+  }
+]

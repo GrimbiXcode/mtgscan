@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MTG Scanner - OCR Verbesserungen Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            margin: 20px 0;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-result {
+            background: #f8f9fa;
+            padding: 15px;
+            margin: 10px 0;
+            border-left: 4px solid #007bff;
+            border-radius: 4px;
+        }
+        .test-pass { border-left-color: #28a745; }
+        .test-fail { border-left-color: #dc3545; }
+        .test-info { border-left-color: #17a2b8; }
+        
+        .score-breakdown {
+            background: #e9ecef;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+        
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        
+        button:hover {
+            background: #0056b3;
+        }
+        
+        .camera-test {
+            text-align: center;
+        }
+        
+        #cameraPreview {
+            max-width: 100%;
+            border-radius: 8px;
+        }
+        
+        #testResults {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎴 MTG Scanner - OCR Verbesserungen Test</h1>
+    
+    <div class="test-section">
+        <h2>📊 Übersicht der Verbesserungen</h2>
+        <div class="test-result test-info">
+            <h3>Hauptverbesserungen:</h3>
+            <ul>
+                <li><strong>Intelligente Bereichsauswahl:</strong> 4 verschiedene Kartennamen-Bereiche werden analysiert und der beste ausgewählt</li>
+                <li><strong>Schonende Bildvorverarbeitung:</strong> 3 verschiedene Verarbeitungsstufen (gentle, enhanced, highContrast)</li>
+                <li><strong>Optimierte OCR-Konfiguration:</strong> 5 spezialisierte Tesseract-Konfigurationen für MTG-Karten</li>
+                <li><strong>Intelligente Textreinigung:</strong> Kontext-aware OCR-Korrekturen</li>
+                <li><strong>Verbessertes Scoring:</strong> Umfassendes Bewertungssystem für Kartennamen</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>🧪 Text-Reinigung Tests</h2>
+        <button onclick="runTextCleaningTests()">Text-Reinigung testen</button>
+        <div id="textCleaningResults"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>🔍 Kartennamen-Scoring Tests</h2>
+        <button onclick="runScoringTests()">Scoring-System testen</button>
+        <div id="scoringResults"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>📷 Live-Kamera Test</h2>
+        <div class="camera-test">
+            <button onclick="startCameraTest()">Kamera-Test starten</button>
+            <button onclick="captureTestImage()" id="captureBtn" style="display:none;">Testbild aufnehmen</button>
+            <button onclick="stopCameraTest()" id="stopBtn" style="display:none;">Test beenden</button>
+            
+            <div style="margin: 20px 0;">
+                <video id="cameraPreview" style="display:none;" autoplay playsinline></video>
+                <canvas id="captureCanvas" style="display:none;"></canvas>
+            </div>
+            
+            <div id="cameraResults"></div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>📈 Performance Monitoring</h2>
+        <div id="performanceResults">
+            <p>Führe Tests aus, um Performance-Daten zu sehen...</p>
+        </div>
+    </div>
+
+    <script type="module">
+        import OCRService from './src/ocrService.js';
+        import CameraManager from './src/camera.js';
+
+        // Global test objects
+        window.ocrService = new OCRService();
+        window.cameraManager = new CameraManager();
+        window.testResults = {};
+
+        // Initialize OCR for testing
+        async function initOCR() {
+            try {
+                await window.ocrService.init(
+                    (progress) => console.log(`OCR Init Progress: ${Math.round(progress * 100)}%`),
+                    (status) => console.log(`OCR Status: ${status}`)
+                );
+                console.log('OCR ready for testing');
+            } catch (error) {
+                console.error('OCR init failed:', error);
+            }
+        }
+
+        // Text cleaning tests
+        window.runTextCleaningTests = function() {
+            const testCases = [
+                // Typical OCR mistakes in MTG card names
+                { input: "L1ghtning B0lt", expected: "Lightning Bolt", description: "Number-to-letter fixes" },
+                { input: "Serra Ange1", expected: "Serra Angel", description: "1 to l at end" },
+                { input: "B1ack L0tus", expected: "Black Lotus", description: "Multiple number fixes" },
+                { input: "Lightning|Bo1t", expected: "Lightning Bolt", description: "Artifact removal + fixes" },
+                { input: "Counterspell ", expected: "Counterspell", description: "Whitespace cleanup" },
+                { input: "Swords to P1owshares", expected: "Swords to Plowshares", description: "1 to l in middle" },
+                { input: "rnadness", expected: "madness", description: "rn to m fix" },
+                { input: "vvild", expected: "wild", description: "vv to w fix" },
+                { input: "Lightning  -  Bolt", expected: "Lightning-Bolt", description: "Hyphen normalization" },
+                { input: "Jace's  Ingenuity", expected: "Jace's Ingenuity", description: "Apostrophe normalization" },
+            ];
+
+            let results = '';
+            let passed = 0;
+
+            for (const test of testCases) {
+                const result = window.ocrService.cleanOCRText(test.input);
+                const success = result === test.expected;
+                
+                if (success) passed++;
+                
+                results += `
+                    <div class="test-result ${success ? 'test-pass' : 'test-fail'}">
+                        <strong>${test.description}</strong><br>
+                        Input: "${test.input}"<br>
+                        Expected: "${test.expected}"<br>
+                        Got: "${result}"<br>
+                        ${success ? '✅ PASS' : '❌ FAIL'}
+                    </div>
+                `;
+            }
+
+            results = `<h3>Text-Reinigung Ergebnisse: ${passed}/${testCases.length} bestanden</h3>` + results;
+            document.getElementById('textCleaningResults').innerHTML = results;
+        };
+
+        // Scoring system tests
+        window.runScoringTests = function() {
+            const mockOCRResult = {
+                text: "Lightning Bolt\\nInstant\\n3 damage to any target",
+                lines: [
+                    { text: "Lightning Bolt", confidence: 85 },
+                    { text: "Instant", confidence: 90 },
+                    { text: "3 damage to any target", confidence: 75 }
+                ],
+                words: [
+                    { text: "Lightning", confidence: 88, bbox: { x0: 10, y0: 5 } },
+                    { text: "Bolt", confidence: 82, bbox: { x0: 80, y0: 5 } },
+                    { text: "Instant", confidence: 90, bbox: { x0: 10, y0: 25 } }
+                ]
+            };
+
+            const candidates = window.ocrService.extractCardNames(mockOCRResult);
+            const scored = window.ocrService.enhanceCardNameScoring(candidates, mockOCRResult.text);
+
+            let results = '<h3>Kartennamen-Extraktion und Scoring</h3>';
+            
+            scored.forEach((candidate, i) => {
+                results += `
+                    <div class="test-result ${i === 0 ? 'test-pass' : 'test-info'}">
+                        <strong>Kandidat ${i + 1}: "${candidate.text}"</strong><br>
+                        Finaler Score: ${candidate.finalScore}<br>
+                        Ursprüngliche Konfidenz: ${candidate.originalConfidence}<br>
+                        Quelle: ${candidate.source}<br>
+                        <div class="score-breakdown">
+                            Score-Aufschlüsselung: ${JSON.stringify(candidate.scoreBreakdown, null, 2)}
+                        </div>
+                    </div>
+                `;
+            });
+
+            document.getElementById('scoringResults').innerHTML = results;
+        };
+
+        // Camera test functions
+        window.startCameraTest = async function() {
+            try {
+                const video = document.getElementById('cameraPreview');
+                const canvas = document.getElementById('captureCanvas');
+                
+                await window.cameraManager.init(video, canvas);
+                await window.cameraManager.startCamera();
+                
+                video.style.display = 'block';
+                document.getElementById('captureBtn').style.display = 'inline-block';
+                document.getElementById('stopBtn').style.display = 'inline-block';
+                
+                document.getElementById('cameraResults').innerHTML = 
+                    '<div class="test-result test-pass">✅ Kamera erfolgreich gestartet</div>';
+                    
+            } catch (error) {
+                document.getElementById('cameraResults').innerHTML = 
+                    `<div class="test-result test-fail">❌ Kamera-Fehler: ${error.message}</div>`;
+            }
+        };
+
+        window.captureTestImage = async function() {
+            try {
+                const startTime = performance.now();
+                
+                // Capture image
+                const capturedImage = await window.cameraManager.captureImage();
+                const captureTime = performance.now() - startTime;
+                
+                // Process with improved OCR pipeline
+                const preprocessTime = performance.now();
+                const processedCanvas = window.cameraManager.preprocessForOCR(capturedImage.canvas);
+                const preprocessDuration = performance.now() - preprocessTime;
+                
+                // Update performance stats
+                updatePerformanceStats({
+                    captureTime: captureTime,
+                    preprocessTime: preprocessDuration,
+                    imageSize: `${capturedImage.canvas.width}x${capturedImage.canvas.height}`,
+                    processedSize: `${processedCanvas.width}x${processedCanvas.height}`
+                });
+                
+                document.getElementById('cameraResults').innerHTML = `
+                    <div class="test-result test-pass">
+                        ✅ Testbild erfolgreich aufgenommen und verarbeitet<br>
+                        Aufnahme: ${captureTime.toFixed(1)}ms<br>
+                        Vorverarbeitung: ${preprocessDuration.toFixed(1)}ms<br>
+                        Original: ${capturedImage.canvas.width}x${capturedImage.canvas.height}<br>
+                        Verarbeitet: ${processedCanvas.width}x${processedCanvas.height}
+                    </div>
+                `;
+                
+            } catch (error) {
+                document.getElementById('cameraResults').innerHTML = 
+                    `<div class="test-result test-fail">❌ Aufnahme-Fehler: ${error.message}</div>`;
+            }
+        };
+
+        window.stopCameraTest = function() {
+            window.cameraManager.stopCamera();
+            document.getElementById('cameraPreview').style.display = 'none';
+            document.getElementById('captureBtn').style.display = 'none';
+            document.getElementById('stopBtn').style.display = 'none';
+            
+            document.getElementById('cameraResults').innerHTML = 
+                '<div class="test-result test-info">ℹ️ Kamera-Test beendet</div>';
+        };
+
+        function updatePerformanceStats(stats) {
+            window.testResults.performance = window.testResults.performance || [];
+            window.testResults.performance.push(stats);
+            
+            const avgCaptureTime = window.testResults.performance.reduce((sum, s) => sum + s.captureTime, 0) / window.testResults.performance.length;
+            const avgPreprocessTime = window.testResults.performance.reduce((sum, s) => sum + s.preprocessTime, 0) / window.testResults.performance.length;
+            
+            document.getElementById('performanceResults').innerHTML = `
+                <div class="test-result test-info">
+                    <h3>Performance-Statistiken (${window.testResults.performance.length} Tests)</h3>
+                    Durchschnittliche Aufnahmezeit: ${avgCaptureTime.toFixed(1)}ms<br>
+                    Durchschnittliche Vorverarbeitungszeit: ${avgPreprocessTime.toFixed(1)}ms<br>
+                    Letzte Bildgröße: Original ${stats.imageSize} → Verarbeitet ${stats.processedSize}
+                </div>
+            `;
+        }
+
+        // Initialize OCR when page loads
+        document.addEventListener('DOMContentLoaded', initOCR);
+    </script>
+</body>
+</html>
