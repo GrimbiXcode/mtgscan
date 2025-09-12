@@ -1,3 +1,7 @@
+# WARP.md
+
+This file provides guidance to WARP (warp.dev) when working with code in this repository.
+
 # MTG Scanner - Technical Documentation
 
 > **🎴 Magic: The Gathering Card Scanner Web Application**  
@@ -23,7 +27,7 @@
 ├─────────────────────────────────────────────────────────────┤
 │  Frontend (Vanilla JS)   │  Storage (IndexedDB)            │
 │  ├── Camera Management   │  ├── Card Collection            │
-│  ├── Image Processing    │  ├── Metadata Storage           │
+│  ├── Region Extraction   │  ├── Metadata Storage           │
 │  ├── OCR Integration     │  └── Search Indexing            │
 │  └── Export Functionality│                                 │
 ├─────────────────────────────────────────────────────────────┤
@@ -33,6 +37,15 @@
 │  └── Tesseract.js (OCR Engine)                             │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+### Key Architectural Decisions
+
+**Removed Complex Card Detection**: Previously included ~1200 lines of real-time card boundary detection code. Now uses focused region extraction strategies for better performance and maintainability.
+
+**Intelligent Region Extraction**: Uses 5 different strategies with quality scoring to extract optimal OCR regions:
+- Quality-based selection using size ratio, aspect ratio, and content analysis
+- Fallback system ensures robust operation
+- Debug mode provides visual comparison of all strategies
 
 ## 📁 Project Structure
 
@@ -52,7 +65,8 @@ mtgscan/
     ├── 🎯 main.js             # Application orchestrator
     ├── 💾 database.js         # IndexedDB wrapper
     ├── 🔍 scryfall.js         # Scryfall API client
-    ├── 📷 camera.js           # Camera management
+    ├── 📷 camera.js           # Camera management & region extraction
+    ├── 🔤 ocrService.js       # OCR integration with Tesseract.js
     ├── 📊 csvExport.js        # Export functionality
     └── 🎨 styles.css          # UI styling
 ```
@@ -122,16 +136,32 @@ class MTGDatabase {
 - Image URL resolution for double-faced cards
 
 ### 4. **CameraManager** (`camera.js`)
-**Camera access and image processing**
+**Camera access and intelligent region extraction**
 
 **Capabilities:**
-- Multi-device camera support
+- Multi-device camera support with HTTPS requirement handling
 - Optimal constraint selection (mobile vs desktop)
-- Image preprocessing for OCR
-- Canvas-based image capture
-- Basic image enhancement (contrast, sharpening)
+- **5 intelligent region extraction strategies** for OCR optimization:
+  - `smart_name_region`: Adaptive based on card proportions
+  - `adaptive_top_region`: Content-aware sizing with text density analysis
+  - `enhanced_top25`: Improved positioning algorithm
+  - `focused_name_area`: MTG card name area targeting
+  - `wide_top_center`: Wide extraction for complex layouts
+- Quality-based strategy selection with scoring system
+- Comprehensive debug mode with visual strategy comparison
+- Canvas-based image capture with preprocessing
 
-### 5. **CSVExporter** (`csvExport.js`)
+### 5. **OCRService** (`ocrService.js`)
+**OCR integration with Tesseract.js**
+
+**Features:**
+- Multi-language support (English, German, French, Spanish, etc.)
+- Language preference persistence in localStorage
+- Progress tracking and status updates
+- Optimized initialization with worker management
+- Performance optimization with SharedArrayBuffer support
+
+### 6. **CSVExporter** (`csvExport.js`)
 **Multi-format export functionality**
 
 **Supported Formats:**
@@ -176,13 +206,47 @@ npm run preview
 ```
 
 ### Development Scripts
-```json
-{
-  "dev": "vite",              // Development server with HMR
-  "build": "vite build",      // Production build
-  "preview": "vite preview",  // Preview built app
-  "serve": "python3 -m http.server 8080"  // Simple server
-}
+```bash
+# Development with hot reload (HTTPS enabled for camera API)
+npm run dev              # → https://localhost:3000
+
+# Production build
+npm run build            # → Creates dist/ folder with optimized assets
+
+# Preview production build locally
+npm run preview          # → Preview built app
+
+# Simple HTTP server (limited functionality - camera requires HTTPS)
+npm run serve            # → http://localhost:8080
+```
+
+### SSL Certificate Setup
+The development server requires HTTPS for camera API access. Certificates are included:
+```bash
+# Self-signed certificates (already generated)
+localhost.pem        # SSL certificate
+localhost-key.pem    # SSL private key
+```
+
+### Critical Development Commands
+```bash
+# IMPORTANT: Always use npm run dev for full functionality
+# Camera API requires HTTPS - npm run serve will have limited camera access
+npm run dev
+
+# Test OCR languages
+# Change language in UI dropdown or via console:
+# window.mtgScanner.ocrService.setLanguage('deu') // German
+# window.mtgScanner.ocrService.setLanguage('eng') // English
+
+# Debug region extraction
+# Enable debug mode in UI to see all 5 region extraction strategies
+# Download intermediate processing steps for analysis
+
+# Check application state in console
+window.mtgScanner.currentCards      // Current card collection
+window.mtgScanner.useOCR            // OCR availability status
+window.mtgScanner.debugMode         // Debug mode status
 ```
 
 ## 🔍 API Integration
@@ -255,25 +319,26 @@ await database.clearAllCards();
 ## 🎯 Current Implementation Status
 
 ### ✅ Fully Implemented
-- **Camera capture and preview**
-- **Scryfall API integration with fuzzy search**
-- **IndexedDB storage with full CRUD**
-- **Multi-format CSV export**
-- **Responsive UI with dark mode support**
-- **Error handling and user feedback**
+- **Camera capture and preview** with HTTPS requirement handling
+- **5 intelligent region extraction strategies** with quality-based selection
+- **Full OCR integration** with Tesseract.js and multi-language support
+- **Scryfall API integration** with fuzzy search and error handling
+- **IndexedDB storage** with full CRUD operations and search indexing
+- **Multi-format CSV export** (Moxfield, Deckbox, MTG Arena)
+- **Comprehensive debug mode** with visual strategy comparison
+- **Responsive UI** with dark mode support and German localization
+- **Error handling and user feedback** with graceful fallbacks
 
 ### ⚠️ Partially Implemented
-- **OCR Integration**: Tesseract.js installed but uses manual input
-- **Image Processing**: Basic preprocessing, room for enhancement
-- **Offline Support**: Storage works offline, but no service worker
+- **Offline Support**: Storage works offline, but no service worker for PWA
+- **Advanced Image Processing**: Could be enhanced for better card recognition
 
 ### 🔮 Future Enhancements
-- **Full OCR automation** with Tesseract.js
-- **Service Worker** for PWA capabilities
-- **Advanced image processing** for better card recognition
-- **Bulk scanning** mode
-- **Cloud synchronization**
-- **Price data integration**
+- **Service Worker** for PWA capabilities and offline caching
+- **Bulk scanning** mode for multiple cards
+- **Cloud synchronization** between devices
+- **Price data integration** from TCGPlayer or similar APIs
+- **Advanced image enhancement** for better OCR in poor lighting
 
 ## 🛠️ Technical Decisions
 
@@ -291,19 +356,40 @@ await database.clearAllCards();
 
 ### Why IndexedDB?
 - **Large Storage Capacity**: No 5MB localStorage limit
-- **Structured Data**: Built for complex objects
+- **Structured Data**: Built for complex objects with CRUD operations
 - **Async Operations**: Non-blocking database operations
 - **Offline Capability**: Works without network connection
+- **Search Indexing**: Built-in indexes on name, set, and scryfallId fields
+
+### Why Tesseract.js for OCR?
+- **Client-Side Processing**: No server required, privacy-friendly
+- **Multi-Language Support**: 10+ languages including English, German, Japanese
+- **WebAssembly Performance**: Near-native speed in modern browsers
+- **Worker-Based**: Non-blocking UI during OCR processing
+- **SharedArrayBuffer Optimization**: Faster processing when available
 
 ## 🐛 Debugging & Testing
 
 ### Common Issues
-1. **Camera Permission**: Check browser permissions
+1. **Camera Permission**: Check browser permissions (requires HTTPS)
 2. **API Rate Limits**: Scryfall has 100 req/sec limit
-3. **HTTPS Required**: Camera API requires secure context
-4. **Mobile Compatibility**: Test on actual devices
+3. **HTTPS Required**: Camera API requires secure context - use `npm run dev`
+4. **OCR Language**: Ensure correct language is selected for better results
+5. **Mobile Compatibility**: Test on actual devices, not browser dev tools
 
-### Debug Tools
+### Built-in Debug Mode
+```javascript
+// Enable debug mode in UI
+// Click 🔬 Debug button in the interface
+
+// Debug mode shows:
+// - 5 region extraction strategies with quality scores
+// - Visual comparison of extraction methods
+// - Downloadable intermediate processing steps
+// - Real-time OCR analysis with confidence metrics
+```
+
+### Console Debug Tools
 ```javascript
 // Access app instance in console
 window.mtgScanner
@@ -313,21 +399,31 @@ await window.mtgScanner.database.getAllCards()
 
 // Test camera support
 await CameraManager.checkCameraSupport()
+
+// Test OCR service
+window.mtgScanner.ocrService.isReady()
+
+// Check current debug mode
+window.mtgScanner.debugMode
 ```
 
 ### Browser Compatibility
 - **Chrome/Edge**: Full support ✅
-- **Firefox**: Full support ✅
-- **Safari**: Requires HTTPS for camera ⚠️
-- **Mobile Browsers**: Optimized for touch ✅
+- **Firefox**: Full support ✅  
+- **Safari**: Requires HTTPS for camera (use `npm run dev`) ⚠️
+- **Mobile Browsers**: Optimized for touch, supports multi-language OCR ✅
+- **iOS Safari**: Camera works with HTTPS, OCR performance may vary ⚠️
 
 ## 📊 Performance Considerations
 
 ### Optimization Strategies
-- **Lazy Loading**: Card images loaded on demand
-- **Debounced Search**: Prevents excessive API calls
-- **Image Compression**: JPEG quality set to 0.8
-- **Efficient DOM Updates**: Minimal re-renders
+- **Lazy Loading**: Card images loaded on demand from Scryfall CDN
+- **Debounced Search**: Prevents excessive API calls during manual input
+- **Image Compression**: JPEG quality set to 0.8 for captures
+- **Efficient DOM Updates**: Minimal re-renders in card collection
+- **Smart Region Extraction**: Only processes card name areas, not full image
+- **OCR Worker Management**: Reuses Tesseract.js workers for performance
+- **Manual Chunking**: Tesseract.js separated into its own build chunk
 
 ### Storage Efficiency
 - **Selective Data**: Only stores necessary card fields

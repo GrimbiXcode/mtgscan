@@ -9,10 +9,17 @@
     "preview": "vite preview",
     "serve": "python3 -m http.server 8080"
   },
-  "keywords": ["mtg", "magic-the-gathering", "card-scanner", "scryfall", "moxfield"],
+  "keywords": [
+    "mtg",
+    "magic-the-gathering",
+    "card-scanner",
+    "scryfall",
+    "moxfield"
+  ],
   "author": "",
   "license": "MIT",
   "devDependencies": {
+    "canvas": "^3.2.0",
     "vite": "^5.0.0"
   },
   "dependencies": {

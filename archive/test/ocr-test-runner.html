@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MTG Scanner - OCR Test Runner für Deutsche Karten</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .test-header {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .test-controls {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .test-result {
+            background: white;
+            margin: 10px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .test-result.success {
+            border-left: 4px solid #28a745;
+        }
+        
+        .test-result.partial {
+            border-left: 4px solid #ffc107;
+        }
+        
+        .test-result.fail {
+            border-left: 4px solid #dc3545;
+        }
+        
+        .test-result-header {
+            display: flex;
+            align-items: center;
+            padding: 15px 20px;
+            background: #f8f9fa;
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        .test-result-header:hover {
+            background: #e9ecef;
+        }
+        
+        .card-image {
+            width: 80px;
+            height: auto;
+            border-radius: 4px;
+            margin-right: 15px;
+        }
+        
+        .test-info {
+            flex: 1;
+        }
+        
+        .test-details {
+            padding: 20px;
+            display: none;
+            border-top: 1px solid #dee2e6;
+        }
+        
+        .test-details.show {
+            display: block;
+        }
+        
+        .ocr-result {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-family: monospace;
+        }
+        
+        .preprocessing-steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 15px 0;
+        }
+        
+        .preprocessing-step {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            text-align: center;
+        }
+        
+        .preprocessing-step canvas {
+            max-width: 100%;
+            border-radius: 4px;
+            margin: 5px 0;
+        }
+        
+        .score-breakdown {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        
+        .candidate {
+            background: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 5px 0;
+        }
+        
+        .candidate.best {
+            border-color: #28a745;
+            background-color: #d4edda;
+        }
+        
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        
+        button:hover {
+            background: #0056b3;
+        }
+        
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: #007bff;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 0.8em;
+        }
+        
+        .stats-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 15px 0;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #007bff;
+        }
+        
+        .log-panel {
+            background: #212529;
+            color: #fff;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: monospace;
+            max-height: 300px;
+            overflow-y: auto;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-header">
+        <h1>🎴 MTG Scanner - OCR Test Runner für Deutsche Karten</h1>
+        <p>Automatische Tests mit echten deutschen MTG-Karten zur OCR-Optimierung</p>
+    </div>
+
+    <div class="test-controls">
+        <button id="startTests" onclick="startAllTests()">🚀 Alle Tests starten</button>
+        <button id="testSingleCard" onclick="testSingleCard()">🔍 Einzelkarte testen</button>
+        <button id="optimizeSettings" onclick="optimizeOCRSettings()">⚙️ OCR-Einstellungen optimieren</button>
+        <button id="clearResults" onclick="clearResults()">🗑️ Ergebnisse löschen</button>
+        
+        <div style="margin: 15px 0;">
+            <label>
+                <input type="checkbox" id="showDebugInfo" checked> Debug-Informationen anzeigen
+            </label>
+            <label style="margin-left: 20px;">
+                <input type="checkbox" id="saveProcessedImages" checked> Verarbeitete Bilder speichern
+            </label>
+        </div>
+        
+        <div id="progressContainer" style="display: none;">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill">0%</div>
+            </div>
+            <div id="currentTest">Bereit...</div>
+        </div>
+    </div>
+
+    <div class="stats-summary" id="statsContainer" style="display: none;">
+        <div class="stat-card">
+            <div class="stat-number" id="totalTests">0</div>
+            <div>Tests</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number" id="successRate">0%</div>
+            <div>Erfolgsrate</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number" id="avgConfidence">0%</div>
+            <div>Ø Konfidenz</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number" id="avgTime">0ms</div>
+            <div>Ø Zeit</div>
+        </div>
+    </div>
+
+    <div id="logPanel" class="log-panel" style="display: none;">
+        <div id="logContent"></div>
+    </div>
+
+    <div id="testResults">
+        <!-- Test results will be populated here -->
+    </div>
+
+    <script type="module">
+        import OCRService from './src/ocrService.js';
+        import CameraManager from './src/camera.js';
+
+        // Global test state
+        window.testState = {
+            ocrService: new OCRService(),
+            cameraManager: new CameraManager(),
+            results: [],
+            isRunning: false,
+            currentOptimization: null
+        };
+
+        // Test images - diese werden aus dem test_images/german Verzeichnis geladen
+        const testImages = [
+            'Elf des neuen Lebens.jpeg',
+            'Wappenbanner.jpeg',
+            'Wächter des Kreislaufs.jpeg'
+        ];
+
+        // Initialize OCR
+        async function initializeOCR() {
+            try {
+                log('Initialisiere OCR Service...');
+                await window.testState.ocrService.init(
+                    (progress) => log(`OCR Init Progress: ${Math.round(progress * 100)}%`),
+                    (status) => log(`OCR Status: ${status}`)
+                );
+                log('OCR Service bereit');
+                return true;
+            } catch (error) {
+                log(`OCR Initialisierung fehlgeschlagen: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        // Logging function
+        function log(message, type = 'info') {
+            const logPanel = document.getElementById('logPanel');
+            const logContent = document.getElementById('logContent');
+            
+            if (logPanel.style.display === 'none') {
+                logPanel.style.display = 'block';
+            }
+            
+            const timestamp = new Date().toLocaleTimeString();
+            const logClass = type === 'error' ? 'color: #dc3545' : 
+                           type === 'success' ? 'color: #28a745' : 
+                           type === 'warning' ? 'color: #ffc107' : 'color: #fff';
+            
+            logContent.innerHTML += `<div style="${logClass}">[${timestamp}] ${message}</div>`;
+            logContent.scrollTop = logContent.scrollHeight;
+            
+            console.log(`[OCR Test] ${message}`);
+        }
+
+        // Load image as canvas
+        async function loadImageAsCanvas(imagePath) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    resolve(canvas);
+                };
+                img.onerror = reject;
+                img.src = imagePath;
+            });
+        }
+
+        // Extract expected card name from filename
+        function extractExpectedName(filename) {
+            return filename.replace(/\.(jpeg|jpg|png|gif|bmp)$/i, '').trim();
+        }
+
+        // Calculate similarity between strings (for partial matches)
+        function calculateSimilarity(str1, str2) {
+            const longer = str1.length > str2.length ? str1 : str2;
+            const shorter = str1.length > str2.length ? str2 : str1;
+            
+            if (longer.length === 0) return 1.0;
+            
+            const editDistance = levenshteinDistance(longer.toLowerCase(), shorter.toLowerCase());
+            return (longer.length - editDistance) / longer.length;
+        }
+
+        function levenshteinDistance(str1, str2) {
+            const matrix = [];
+            
+            for (let i = 0; i <= str2.length; i++) {
+                matrix[i] = [i];
+            }
+            
+            for (let j = 0; j <= str1.length; j++) {
+                matrix[0][j] = j;
+            }
+            
+            for (let i = 1; i <= str2.length; i++) {
+                for (let j = 1; j <= str1.length; j++) {
+                    if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+                        matrix[i][j] = matrix[i - 1][j - 1];
+                    } else {
+                        matrix[i][j] = Math.min(
+                            matrix[i - 1][j - 1] + 1,
+                            matrix[i][j - 1] + 1,
+                            matrix[i - 1][j] + 1
+                        );
+                    }
+                }
+            }
+            
+            return matrix[str2.length][str1.length];
+        }
+
+        // Test a single image
+        async function testSingleImage(imagePath, expectedName) {
+            log(`Teste Bild: ${imagePath}`);
+            const startTime = performance.now();
+            
+            try {
+                // Load image
+                const originalCanvas = await loadImageAsCanvas(imagePath);
+                log(`Bild geladen: ${originalCanvas.width}x${originalCanvas.height}`);
+                
+                // Test different preprocessing approaches
+                const preprocessingResults = await testPreprocessingVariations(originalCanvas);
+                
+                // Run OCR with multiple configurations
+                const ocrResults = await testOCRConfigurations(preprocessingResults.best);
+                
+                // Extract and score card names
+                const candidates = window.testState.ocrService.extractCardNames(ocrResults.best);
+                const scored = window.testState.ocrService.enhanceCardNameScoring(candidates, ocrResults.best.text);
+                
+                const totalTime = performance.now() - startTime;
+                
+                // Evaluate results
+                const evaluation = evaluateResults(scored, expectedName);
+                
+                const result = {
+                    imagePath,
+                    expectedName,
+                    originalCanvas,
+                    preprocessingResults,
+                    ocrResults,
+                    candidates: scored,
+                    evaluation,
+                    totalTime,
+                    timestamp: new Date().toISOString()
+                };
+                
+                log(`Test abgeschlossen: ${evaluation.status} (${totalTime.toFixed(1)}ms)`, 
+                    evaluation.status === 'success' ? 'success' : 
+                    evaluation.status === 'partial' ? 'warning' : 'error');
+                
+                return result;
+                
+            } catch (error) {
+                log(`Fehler beim Testen von ${imagePath}: ${error.message}`, 'error');
+                return {
+                    imagePath,
+                    expectedName,
+                    error: error.message,
+                    totalTime: performance.now() - startTime,
+                    timestamp: new Date().toISOString()
+                };
+            }
+        }
+
+        // Test different preprocessing variations
+        async function testPreprocessingVariations(originalCanvas) {
+            const variations = {};
+            const cameraManager = window.testState.cameraManager;
+            
+            // Clone original for each test
+            const cloneCanvas = (canvas) => {
+                const clone = document.createElement('canvas');
+                clone.width = canvas.width;
+                clone.height = canvas.height;
+                const ctx = clone.getContext('2d');
+                ctx.drawImage(canvas, 0, 0);
+                return clone;
+            };
+            
+            try {
+                // Test original preprocessing
+                const processed = cameraManager.preprocessForOCR(cloneCanvas(originalCanvas));
+                
+                // Test gentle preprocessing
+                const gentleCanvas = cloneCanvas(originalCanvas);
+                const gentleRegion = cameraManager.segmentCardHeader(gentleCanvas);
+                const gentleOptimized = cameraManager.resizeForOCR(gentleRegion);
+                cameraManager.applyGentlePreprocessing(gentleOptimized);
+                
+                // Test enhanced preprocessing  
+                const enhancedCanvas = cloneCanvas(originalCanvas);
+                const enhancedRegion = cameraManager.segmentCardHeader(enhancedCanvas);
+                const enhancedOptimized = cameraManager.resizeForOCR(enhancedRegion);
+                cameraManager.applyEnhancedPreprocessing(enhancedOptimized);
+                
+                // Test high contrast preprocessing
+                const highContrastCanvas = cloneCanvas(originalCanvas);
+                const highContrastRegion = cameraManager.segmentCardHeader(highContrastCanvas);
+                const highContrastOptimized = cameraManager.resizeForOCR(highContrastRegion);
+                cameraManager.applyHighContrastPreprocessing(highContrastOptimized);
+                
+                variations.original = processed;
+                variations.gentle = gentleOptimized;
+                variations.enhanced = enhancedOptimized;
+                variations.highContrast = highContrastOptimized;
+                variations.best = processed; // Default to original, could be improved with scoring
+                
+            } catch (error) {
+                log(`Fehler bei Preprocessing-Variationen: ${error.message}`, 'error');
+                variations.original = originalCanvas;
+                variations.best = originalCanvas;
+            }
+            
+            return variations;
+        }
+
+        // Test different OCR configurations
+        async function testOCRConfigurations(canvas) {
+            const results = {};
+            
+            try {
+                // Test primary configuration
+                const primaryResult = await window.testState.ocrService.recognizeText(canvas, {
+                    useAllConfigs: false
+                });
+                
+                // Test all configurations
+                const allConfigsResult = await window.testState.ocrService.recognizeText(canvas, {
+                    useAllConfigs: true
+                });
+                
+                results.primary = primaryResult;
+                results.allConfigs = allConfigsResult;
+                results.best = primaryResult.confidence > (allConfigsResult.confidence || 0) ? 
+                              primaryResult : allConfigsResult;
+                              
+            } catch (error) {
+                log(`Fehler bei OCR-Konfigurationen: ${error.message}`, 'error');
+                results.error = error.message;
+                results.best = { text: '', confidence: 0, candidates: [] };
+            }
+            
+            return results;
+        }
+
+        // Evaluate OCR results against expected name
+        function evaluateResults(candidates, expectedName) {
+            if (!candidates || candidates.length === 0) {
+                return {
+                    status: 'fail',
+                    message: 'Keine Kandidaten gefunden',
+                    bestMatch: null,
+                    similarity: 0
+                };
+            }
+            
+            const bestCandidate = candidates[0];
+            const similarity = calculateSimilarity(bestCandidate.text, expectedName);
+            
+            let status, message;
+            if (similarity >= 0.9) {
+                status = 'success';
+                message = `Exakte Übereinstimmung (${Math.round(similarity * 100)}%)`;
+            } else if (similarity >= 0.7) {
+                status = 'partial';
+                message = `Teilweise Übereinstimmung (${Math.round(similarity * 100)}%)`;
+            } else {
+                status = 'fail';
+                message = `Geringe Übereinstimmung (${Math.round(similarity * 100)}%)`;
+            }
+            
+            return {
+                status,
+                message,
+                bestMatch: bestCandidate,
+                similarity,
+                allCandidates: candidates
+            };
+        }
+
+        // Render test result
+        function renderTestResult(result) {
+            const container = document.getElementById('testResults');
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `test-result ${result.evaluation?.status || 'fail'}`;
+            
+            const expectedName = result.expectedName;
+            const bestMatch = result.evaluation?.bestMatch;
+            const similarity = result.evaluation?.similarity || 0;
+            
+            resultDiv.innerHTML = `
+                <div class="test-result-header" onclick="toggleDetails(this)">
+                    ${result.originalCanvas ? 
+                        `<canvas class="card-image" width="80" height="100"></canvas>` : 
+                        '<div class="card-image" style="background: #ccc;"></div>'
+                    }
+                    <div class="test-info">
+                        <h3>${expectedName}</h3>
+                        <div>Erkannt: "${bestMatch?.text || 'Keine Erkennung'}" (${Math.round(similarity * 100)}%)</div>
+                        <div>Zeit: ${result.totalTime?.toFixed(1)}ms | Konfidenz: ${bestMatch?.finalScore || 0}</div>
+                    </div>
+                    <div style="font-size: 1.5em;">
+                        ${result.evaluation?.status === 'success' ? '✅' : 
+                          result.evaluation?.status === 'partial' ? '⚠️' : '❌'}
+                    </div>
+                </div>
+                <div class="test-details">
+                    ${renderTestDetails(result)}
+                </div>
+            `;
+            
+            container.appendChild(resultDiv);
+            
+            // Draw thumbnail if canvas available
+            if (result.originalCanvas) {
+                const thumbnail = resultDiv.querySelector('.card-image');
+                const ctx = thumbnail.getContext('2d');
+                const scale = Math.min(80 / result.originalCanvas.width, 100 / result.originalCanvas.height);
+                const width = result.originalCanvas.width * scale;
+                const height = result.originalCanvas.height * scale;
+                ctx.drawImage(result.originalCanvas, 0, 0, width, height);
+            }
+        }
+
+        // Render detailed test information
+        function renderTestDetails(result) {
+            let html = '<h4>🔍 Test Details</h4>';
+            
+            // Show evaluation
+            if (result.evaluation) {
+                html += `
+                    <div class="score-breakdown">
+                        <strong>Bewertung:</strong> ${result.evaluation.message}<br>
+                        <strong>Ähnlichkeit:</strong> ${Math.round(result.evaluation.similarity * 100)}%
+                    </div>
+                `;
+            }
+            
+            // Show candidates
+            if (result.candidates && result.candidates.length > 0) {
+                html += '<h5>Kandidaten:</h5>';
+                result.candidates.slice(0, 5).forEach((candidate, i) => {
+                    html += `
+                        <div class="candidate ${i === 0 ? 'best' : ''}">
+                            <strong>"${candidate.text}"</strong> 
+                            (Score: ${candidate.finalScore}, Quelle: ${candidate.source})
+                        </div>
+                    `;
+                });
+            }
+            
+            // Show preprocessing results
+            if (result.preprocessingResults && document.getElementById('saveProcessedImages').checked) {
+                html += '<h5>Bildverarbeitung:</h5>';
+                html += '<div class="preprocessing-steps">';
+                
+                for (const [key, canvas] of Object.entries(result.preprocessingResults)) {
+                    if (canvas && canvas.getContext) {
+                        html += `
+                            <div class="preprocessing-step">
+                                <div><strong>${key}</strong></div>
+                                <canvas width="${Math.min(canvas.width, 200)}" 
+                                        height="${Math.min(canvas.height, 250)}"></canvas>
+                            </div>
+                        `;
+                    }
+                }
+                
+                html += '</div>';
+            }
+            
+            // Show OCR raw results if debug enabled
+            if (document.getElementById('showDebugInfo').checked && result.ocrResults) {
+                html += '<h5>OCR Debug:</h5>';
+                html += `
+                    <div class="ocr-result">
+                        <strong>Rohtext:</strong> "${result.ocrResults.best?.text || 'Kein Text'}"<br>
+                        <strong>Konfidenz:</strong> ${result.ocrResults.best?.confidence || 0}%
+                    </div>
+                `;
+            }
+            
+            return html;
+        }
+
+        // Toggle test details visibility
+        window.toggleDetails = function(header) {
+            const details = header.nextElementSibling;
+            details.classList.toggle('show');
+            
+            // Render preprocessing canvases if needed
+            if (details.classList.contains('show') && document.getElementById('saveProcessedImages').checked) {
+                const testResultDiv = header.closest('.test-result');
+                const resultIndex = Array.from(document.querySelectorAll('.test-result')).indexOf(testResultDiv);
+                const result = window.testState.results[resultIndex];
+                
+                if (result?.preprocessingResults) {
+                    const canvases = details.querySelectorAll('.preprocessing-step canvas');
+                    const steps = Object.entries(result.preprocessingResults);
+                    
+                    canvases.forEach((canvas, i) => {
+                        if (steps[i] && steps[i][1] && steps[i][1].getContext) {
+                            const ctx = canvas.getContext('2d');
+                            const sourceCanvas = steps[i][1];
+                            const scale = Math.min(canvas.width / sourceCanvas.width, canvas.height / sourceCanvas.height);
+                            const width = sourceCanvas.width * scale;
+                            const height = sourceCanvas.height * scale;
+                            ctx.drawImage(sourceCanvas, 0, 0, width, height);
+                        }
+                    });
+                }
+            }
+        };
+
+        // Update progress
+        function updateProgress(current, total, message) {
+            const progressContainer = document.getElementById('progressContainer');
+            const progressFill = document.getElementById('progressFill');
+            const currentTest = document.getElementById('currentTest');
+            
+            if (total > 0) {
+                progressContainer.style.display = 'block';
+                const percentage = Math.round((current / total) * 100);
+                progressFill.style.width = `${percentage}%`;
+                progressFill.textContent = `${percentage}%`;
+                currentTest.textContent = message || `Test ${current}/${total}`;
+            } else {
+                progressContainer.style.display = 'none';
+            }
+        }
+
+        // Update statistics
+        function updateStats() {
+            const results = window.testState.results.filter(r => !r.error);
+            const totalTests = results.length;
+            
+            if (totalTests === 0) return;
+            
+            const successful = results.filter(r => r.evaluation?.status === 'success').length;
+            const partial = results.filter(r => r.evaluation?.status === 'partial').length;
+            const successRate = Math.round(((successful + partial * 0.5) / totalTests) * 100);
+            
+            const avgConfidence = Math.round(
+                results.reduce((sum, r) => sum + (r.evaluation?.bestMatch?.finalScore || 0), 0) / totalTests
+            );
+            
+            const avgTime = Math.round(
+                results.reduce((sum, r) => sum + (r.totalTime || 0), 0) / totalTests
+            );
+            
+            document.getElementById('totalTests').textContent = totalTests;
+            document.getElementById('successRate').textContent = `${successRate}%`;
+            document.getElementById('avgConfidence').textContent = `${avgConfidence}%`;
+            document.getElementById('avgTime').textContent = `${avgTime}ms`;
+            
+            document.getElementById('statsContainer').style.display = 'block';
+        }
+
+        // Main test function
+        window.startAllTests = async function() {
+            if (window.testState.isRunning) return;
+            
+            window.testState.isRunning = true;
+            document.getElementById('startTests').disabled = true;
+            
+            // Initialize OCR if not already done
+            if (!window.testState.ocrService.getProcessingStatus().isInitialized) {
+                const initialized = await initializeOCR();
+                if (!initialized) {
+                    window.testState.isRunning = false;
+                    document.getElementById('startTests').disabled = false;
+                    return;
+                }
+            }
+            
+            log('Starte automatische Tests...');
+            window.testState.results = [];
+            document.getElementById('testResults').innerHTML = '';
+            
+            for (let i = 0; i < testImages.length; i++) {
+                const imageFile = testImages[i];
+                const imagePath = `test_images/german/${imageFile}`;
+                const expectedName = extractExpectedName(imageFile);
+                
+                updateProgress(i, testImages.length, `Teste: ${expectedName}`);
+                
+                try {
+                    const result = await testSingleImage(imagePath, expectedName);
+                    window.testState.results.push(result);
+                    renderTestResult(result);
+                    updateStats();
+                } catch (error) {
+                    log(`Fehler bei Test ${i + 1}: ${error.message}`, 'error');
+                }
+            }
+            
+            updateProgress(testImages.length, testImages.length, 'Alle Tests abgeschlossen');
+            log('Alle Tests abgeschlossen', 'success');
+            
+            window.testState.isRunning = false;
+            document.getElementById('startTests').disabled = false;
+            
+            // Analyze results and suggest optimizations
+            suggestOptimizations();
+        };
+
+        // Suggest optimizations based on test results
+        function suggestOptimizations() {
+            const results = window.testState.results.filter(r => !r.error);
+            const failedResults = results.filter(r => r.evaluation?.status === 'fail');
+            
+            if (failedResults.length === 0) {
+                log('🎉 Alle Tests erfolgreich! Keine Optimierungen nötig.', 'success');
+                return;
+            }
+            
+            log(`📊 Analyse: ${failedResults.length}/${results.length} Tests benötigen Optimierung`, 'warning');
+            
+            // Analyze common failure patterns
+            // This would contain logic to suggest specific optimizations
+            // based on the failure patterns observed
+        }
+
+        // Test single card function
+        window.testSingleCard = async function() {
+            if (testImages.length === 0) return;
+            
+            const randomImage = testImages[Math.floor(Math.random() * testImages.length)];
+            const imagePath = `test_images/german/${randomImage}`;
+            const expectedName = extractExpectedName(randomImage);
+            
+            log(`Einzeltest gestartet: ${expectedName}`);
+            
+            try {
+                const result = await testSingleImage(imagePath, expectedName);
+                renderTestResult(result);
+                log('Einzeltest abgeschlossen', 'success');
+            } catch (error) {
+                log(`Einzeltest fehlgeschlagen: ${error.message}`, 'error');
+            }
+        };
+
+        // Clear results
+        window.clearResults = function() {
+            window.testState.results = [];
+            document.getElementById('testResults').innerHTML = '';
+            document.getElementById('statsContainer').style.display = 'none';
+            document.getElementById('logContent').innerHTML = '';
+            document.getElementById('logPanel').style.display = 'none';
+            log('Ergebnisse gelöscht');
+        };
+
+        // Optimize OCR settings (placeholder)
+        window.optimizeOCRSettings = function() {
+            log('OCR-Optimierung noch nicht implementiert', 'warning');
+        };
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', async () => {
+            log('Test Runner initialisiert');
+            log(`${testImages.length} Testbilder gefunden`);
+        });
+    </script>
+</body>
+</html>
