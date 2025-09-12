@@ -1,0 +1,623 @@
+{
+  "timestamp": "2025-09-12T21:29:29.363Z",
+  "testDirectory": "./test-images-ocr",
+  "configurations": [
+    {
+      "name": "German Standard",
+      "lang": "deu",
+      "psm": "7",
+      "oem": "3",
+      "preprocessing": "none"
+    },
+    {
+      "name": "German High Contrast",
+      "lang": "deu",
+      "psm": "7",
+      "oem": "3",
+      "preprocessing": "contrast"
+    },
+    {
+      "name": "German Inverted",
+      "lang": "deu",
+      "psm": "7",
+      "oem": "3",
+      "preprocessing": "invert"
+    },
+    {
+      "name": "German Upscaled",
+      "lang": "deu",
+      "psm": "7",
+      "oem": "3",
+      "preprocessing": "upscale"
+    },
+    {
+      "name": "German Sharpen",
+      "lang": "deu",
+      "psm": "7",
+      "oem": "3",
+      "preprocessing": "sharpen"
+    },
+    {
+      "name": "English Standard",
+      "lang": "eng",
+      "psm": "7",
+      "oem": "3",
+      "preprocessing": "none"
+    },
+    {
+      "name": "English High Contrast",
+      "lang": "eng",
+      "psm": "7",
+      "oem": "3",
+      "preprocessing": "contrast"
+    },
+    {
+      "name": "Multi-lang Standard",
+      "lang": "eng+deu",
+      "psm": "7",
+      "oem": "3",
+      "preprocessing": "none"
+    },
+    {
+      "name": "Multi-lang Contrast",
+      "lang": "eng+deu",
+      "psm": "7",
+      "oem": "3",
+      "preprocessing": "contrast"
+    },
+    {
+      "name": "German Block Text",
+      "lang": "deu",
+      "psm": "6",
+      "oem": "3",
+      "preprocessing": "contrast"
+    },
+    {
+      "name": "German Single Word",
+      "lang": "deu",
+      "psm": "8",
+      "oem": "3",
+      "preprocessing": "contrast"
+    },
+    {
+      "name": "German Letters Only",
+      "lang": "deu",
+      "psm": "7",
+      "oem": "3",
+      "preprocessing": "contrast",
+      "whitelist": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÄÖÜäöüß '-"
+    }
+  ],
+  "results": [
+    {
+      "imageFile": "C 0100 FDN DE.png",
+      "expectedText": "Tierlieber Waldläufer",
+      "results": [
+        {
+          "config": "German Standard",
+          "expectedText": "Tierlieber Waldläufer",
+          "recognizedText": "AS C 0100 FON + DE",
+          "accuracy": 9.523809523809524,
+          "confidence": 40,
+          "processTime": 212,
+          "success": true,
+          "preprocessing": "none"
+        },
+        {
+          "config": "German High Contrast",
+          "expectedText": "Tierlieber Waldläufer",
+          "recognizedText": "RESEDENN C 0100 FDN DE",
+          "accuracy": 9.090909090909092,
+          "confidence": 47,
+          "processTime": 323,
+          "success": true,
+          "preprocessing": "contrast"
+        },
+        {
+          "config": "German Inverted",
+          "expectedText": "Tierlieber Waldläufer",
+          "recognizedText": "AS C 0100 FON + DE",
+          "accuracy": 9.523809523809524,
+          "confidence": 38,
+          "processTime": 231,
+          "success": true,
+          "preprocessing": "invert"
+        },
+        {
+          "config": "German Upscaled",
+          "expectedText": "Tierlieber Waldläufer",
+          "recognizedText": "KEN C 0100 FON «DE",
+          "accuracy": 9.523809523809524,
+          "confidence": 63,
+          "processTime": 225,
+          "success": true,
+          "preprocessing": "upscale"
+        },
+        {
+          "config": "German Sharpen",
+          "expectedText": "Tierlieber Waldläufer",
+          "recognizedText": "C 0100 FDN «DE",
+          "accuracy": 19.047619047619047,
+          "confidence": 39,
+          "processTime": 238,
+          "success": true,
+          "preprocessing": "sharpen"
+        },
+        {
+          "config": "English Standard",
+          "expectedText": "Tierlieber Waldläufer",
+          "recognizedText": "Rss c 0100 FON + DE |",
+          "accuracy": 4.761904761904762,
+          "confidence": 63,
+          "processTime": 205,
+          "success": true,
+          "preprocessing": "none"
+        },
+        {
+          "config": "English High Contrast",
+          "expectedText": "Tierlieber Waldläufer",
+          "recognizedText": "ES c 0100 FON + DE |",
+          "accuracy": 4.761904761904762,
+          "confidence": 65,
+          "processTime": 208,
+          "success": true,
+          "preprocessing": "contrast"
+        },
+        {
+          "config": "Multi-lang Standard",
+          "expectedText": "Tierlieber Waldläufer",
+          "recognizedText": "Rss c 0100 FON + DE |",
+          "accuracy": 4.761904761904762,
+          "confidence": 63,
+          "processTime": 317,
+          "success": true,
+          "preprocessing": "none"
+        },
+        {
+          "config": "Multi-lang Contrast",
+          "expectedText": "Tierlieber Waldläufer",
+          "recognizedText": "ES c 0100 FON + DE |",
+          "accuracy": 4.761904761904762,
+          "confidence": 65,
+          "processTime": 325,
+          "success": true,
+          "preprocessing": "contrast"
+        },
+        {
+          "config": "German Block Text",
+          "expectedText": "Tierlieber Waldläufer",
+          "recognizedText": "RESEDENN C 0100 FDN DE",
+          "accuracy": 9.090909090909092,
+          "confidence": 47,
+          "processTime": 220,
+          "success": true,
+          "preprocessing": "contrast"
+        },
+        {
+          "config": "German Single Word",
+          "expectedText": "Tierlieber Waldläufer",
+          "recognizedText": "RESEDENN C 0100 FDN DE",
+          "accuracy": 9.090909090909092,
+          "confidence": 47,
+          "processTime": 210,
+          "success": true,
+          "preprocessing": "contrast"
+        },
+        {
+          "config": "German Letters Only",
+          "expectedText": "Tierlieber Waldläufer",
+          "recognizedText": "RESEDENN C 0100 FDN DE",
+          "accuracy": 9.090909090909092,
+          "confidence": 47,
+          "processTime": 210,
+          "success": true,
+          "preprocessing": "contrast"
+        }
+      ],
+      "bestAccuracy": 19.047619047619047,
+      "bestConfig": "German Sharpen"
+    },
+    {
+      "imageFile": "C 0214 FDN DE.png",
+      "expectedText": "Gebrochene Flügel",
+      "results": [
+        {
+          "config": "German Standard",
+          "expectedText": "Gebrochene Flügel",
+          "recognizedText": "VE C 0214 FON -DE NM",
+          "accuracy": 15,
+          "confidence": 47,
+          "processTime": 212,
+          "success": true,
+          "preprocessing": "none"
+        },
+        {
+          "config": "German High Contrast",
+          "expectedText": "Gebrochene Flügel",
+          "recognizedText": "| C 0214 FON -DE I",
+          "accuracy": 5.555555555555555,
+          "confidence": 43,
+          "processTime": 208,
+          "success": true,
+          "preprocessing": "contrast"
+        },
+        {
+          "config": "German Inverted",
+          "expectedText": "Gebrochene Flügel",
+          "recognizedText": "VE (SCHE FON -DE NM",
+          "accuracy": 26.31578947368421,
+          "confidence": 32,
+          "processTime": 217,
+          "success": true,
+          "preprocessing": "invert"
+        },
+        {
+          "config": "German Upscaled",
+          "expectedText": "Gebrochene Flügel",
+          "recognizedText": "| C 0214 FON-DEN",
+          "accuracy": 11.76470588235294,
+          "confidence": 62,
+          "processTime": 231,
+          "success": true,
+          "preprocessing": "upscale"
+        },
+        {
+          "config": "German Sharpen",
+          "expectedText": "Gebrochene Flügel",
+          "recognizedText": "VA C 0214 FON-«DE N",
+          "accuracy": 10.526315789473683,
+          "confidence": 45,
+          "processTime": 210,
+          "success": true,
+          "preprocessing": "sharpen"
+        },
+        {
+          "config": "English Standard",
+          "expectedText": "Gebrochene Flügel",
+          "recognizedText": "— c 0214 FON «DE",
+          "accuracy": 5.88235294117647,
+          "confidence": 50,
+          "processTime": 197,
+          "success": true,
+          "preprocessing": "none"
+        },
+        {
+          "config": "English High Contrast",
+          "expectedText": "Gebrochene Flügel",
+          "recognizedText": "SE c 0214 FON «OE",
+          "accuracy": 11.76470588235294,
+          "confidence": 58,
+          "processTime": 194,
+          "success": true,
+          "preprocessing": "contrast"
+        },
+        {
+          "config": "Multi-lang Standard",
+          "expectedText": "Gebrochene Flügel",
+          "recognizedText": "— C 0214 FON «DE NM",
+          "accuracy": 5.263157894736842,
+          "confidence": 58,
+          "processTime": 300,
+          "success": true,
+          "preprocessing": "none"
+        },
+        {
+          "config": "Multi-lang Contrast",
+          "expectedText": "Gebrochene Flügel",
+          "recognizedText": "SE c 0214 FON «OE I",
+          "accuracy": 15.789473684210526,
+          "confidence": 56,
+          "processTime": 307,
+          "success": true,
+          "preprocessing": "contrast"
+        },
+        {
+          "config": "German Block Text",
+          "expectedText": "Gebrochene Flügel",
+          "recognizedText": "| C 0214 FON -DE I",
+          "accuracy": 5.555555555555555,
+          "confidence": 43,
+          "processTime": 220,
+          "success": true,
+          "preprocessing": "contrast"
+        },
+        {
+          "config": "German Single Word",
+          "expectedText": "Gebrochene Flügel",
+          "recognizedText": "| C 0214 FON -DE I",
+          "accuracy": 5.555555555555555,
+          "confidence": 43,
+          "processTime": 207,
+          "success": true,
+          "preprocessing": "contrast"
+        },
+        {
+          "config": "German Letters Only",
+          "expectedText": "Gebrochene Flügel",
+          "recognizedText": "| C 0214 FON -DE I",
+          "accuracy": 5.555555555555555,
+          "confidence": 43,
+          "processTime": 206,
+          "success": true,
+          "preprocessing": "contrast"
+        }
+      ],
+      "bestAccuracy": 26.31578947368421,
+      "bestConfig": "German Inverted"
+    },
+    {
+      "imageFile": "U 0125 FDN DE.png",
+      "expectedText": "Wächter des Kreislaufs",
+      "results": [
+        {
+          "config": "German Standard",
+          "expectedText": "Wächter des Kreislaufs",
+          "recognizedText": "LER U 0125 FDN +DE |",
+          "accuracy": 4.545454545454546,
+          "confidence": 60,
+          "processTime": 206,
+          "success": true,
+          "preprocessing": "none"
+        },
+        {
+          "config": "German High Contrast",
+          "expectedText": "Wächter des Kreislaufs",
+          "recognizedText": "LER u 0128 FDN DE |",
+          "accuracy": 9.090909090909092,
+          "confidence": 55,
+          "processTime": 207,
+          "success": true,
+          "preprocessing": "contrast"
+        },
+        {
+          "config": "German Inverted",
+          "expectedText": "Wächter des Kreislaufs",
+          "recognizedText": "LER U 0125 FDN +DE |",
+          "accuracy": 4.545454545454546,
+          "confidence": 61,
+          "processTime": 233,
+          "success": true,
+          "preprocessing": "invert"
+        },
+        {
+          "config": "German Upscaled",
+          "expectedText": "Wächter des Kreislaufs",
+          "recognizedText": "A U 01285 FON °DI |",
+          "accuracy": 4.545454545454546,
+          "confidence": 56,
+          "processTime": 234,
+          "success": true,
+          "preprocessing": "upscale"
+        },
+        {
+          "config": "German Sharpen",
+          "expectedText": "Wächter des Kreislaufs",
+          "recognizedText": "EEE U 0125 FDN °Dd |",
+          "accuracy": 4.545454545454546,
+          "confidence": 67,
+          "processTime": 233,
+          "success": true,
+          "preprocessing": "sharpen"
+        },
+        {
+          "config": "English Standard",
+          "expectedText": "Wächter des Kreislaufs",
+          "recognizedText": "— Uv 0128 FON + DE |",
+          "accuracy": 4.545454545454546,
+          "confidence": 58,
+          "processTime": 198,
+          "success": true,
+          "preprocessing": "none"
+        },
+        {
+          "config": "English High Contrast",
+          "expectedText": "Wächter des Kreislaufs",
+          "recognizedText": "— v 0128 FON + DE |",
+          "accuracy": 4.545454545454546,
+          "confidence": 51,
+          "processTime": 209,
+          "success": true,
+          "preprocessing": "contrast"
+        },
+        {
+          "config": "Multi-lang Standard",
+          "expectedText": "Wächter des Kreislaufs",
+          "recognizedText": "— U 0128 FON + DE |",
+          "accuracy": 4.545454545454546,
+          "confidence": 59,
+          "processTime": 482,
+          "success": true,
+          "preprocessing": "none"
+        },
+        {
+          "config": "Multi-lang Contrast",
+          "expectedText": "Wächter des Kreislaufs",
+          "recognizedText": "LER u 0128 FDN + DE |",
+          "accuracy": 4.545454545454546,
+          "confidence": 60,
+          "processTime": 374,
+          "success": true,
+          "preprocessing": "contrast"
+        },
+        {
+          "config": "German Block Text",
+          "expectedText": "Wächter des Kreislaufs",
+          "recognizedText": "LER u 0128 FDN DE |",
+          "accuracy": 9.090909090909092,
+          "confidence": 55,
+          "processTime": 217,
+          "success": true,
+          "preprocessing": "contrast"
+        },
+        {
+          "config": "German Single Word",
+          "expectedText": "Wächter des Kreislaufs",
+          "recognizedText": "LER u 0128 FDN DE |",
+          "accuracy": 9.090909090909092,
+          "confidence": 55,
+          "processTime": 220,
+          "success": true,
+          "preprocessing": "contrast"
+        },
+        {
+          "config": "German Letters Only",
+          "expectedText": "Wächter des Kreislaufs",
+          "recognizedText": "LER u 0128 FDN DE |",
+          "accuracy": 9.090909090909092,
+          "confidence": 55,
+          "processTime": 218,
+          "success": true,
+          "preprocessing": "contrast"
+        }
+      ],
+      "bestAccuracy": 9.090909090909092,
+      "bestConfig": "German High Contrast"
+    }
+  ],
+  "summary": {
+    "German Standard": {
+      "avgAccuracy": 9.689754689754691,
+      "avgConfidence": 49,
+      "avgProcessTime": 210,
+      "maxAccuracy": 15,
+      "minAccuracy": 4.545454545454546,
+      "testsRun": 3,
+      "above80Count": 0,
+      "above60Count": 0
+    },
+    "German High Contrast": {
+      "avgAccuracy": 7.912457912457913,
+      "avgConfidence": 48.333333333333336,
+      "avgProcessTime": 246,
+      "maxAccuracy": 9.090909090909092,
+      "minAccuracy": 5.555555555555555,
+      "testsRun": 3,
+      "above80Count": 0,
+      "above60Count": 0
+    },
+    "German Inverted": {
+      "avgAccuracy": 13.461684514316092,
+      "avgConfidence": 43.666666666666664,
+      "avgProcessTime": 227,
+      "maxAccuracy": 26.31578947368421,
+      "minAccuracy": 4.545454545454546,
+      "testsRun": 3,
+      "above80Count": 0,
+      "above60Count": 0
+    },
+    "German Upscaled": {
+      "avgAccuracy": 8.61132331720567,
+      "avgConfidence": 60.333333333333336,
+      "avgProcessTime": 230,
+      "maxAccuracy": 11.76470588235294,
+      "minAccuracy": 4.545454545454546,
+      "testsRun": 3,
+      "above80Count": 0,
+      "above60Count": 0
+    },
+    "German Sharpen": {
+      "avgAccuracy": 11.373129794182425,
+      "avgConfidence": 50.333333333333336,
+      "avgProcessTime": 227,
+      "maxAccuracy": 19.047619047619047,
+      "minAccuracy": 4.545454545454546,
+      "testsRun": 3,
+      "above80Count": 0,
+      "above60Count": 0
+    },
+    "English Standard": {
+      "avgAccuracy": 5.063237416178592,
+      "avgConfidence": 57,
+      "avgProcessTime": 200,
+      "maxAccuracy": 5.88235294117647,
+      "minAccuracy": 4.545454545454546,
+      "testsRun": 3,
+      "above80Count": 0,
+      "above60Count": 0
+    },
+    "English High Contrast": {
+      "avgAccuracy": 7.024021729904082,
+      "avgConfidence": 58,
+      "avgProcessTime": 203.66666666666666,
+      "maxAccuracy": 11.76470588235294,
+      "minAccuracy": 4.545454545454546,
+      "testsRun": 3,
+      "above80Count": 0,
+      "above60Count": 0
+    },
+    "Multi-lang Standard": {
+      "avgAccuracy": 4.8568390673653825,
+      "avgConfidence": 60,
+      "avgProcessTime": 366.3333333333333,
+      "maxAccuracy": 5.263157894736842,
+      "minAccuracy": 4.545454545454546,
+      "testsRun": 3,
+      "above80Count": 0,
+      "above60Count": 0
+    },
+    "Multi-lang Contrast": {
+      "avgAccuracy": 8.365610997189945,
+      "avgConfidence": 60.333333333333336,
+      "avgProcessTime": 335.3333333333333,
+      "maxAccuracy": 15.789473684210526,
+      "minAccuracy": 4.545454545454546,
+      "testsRun": 3,
+      "above80Count": 0,
+      "above60Count": 0
+    },
+    "German Block Text": {
+      "avgAccuracy": 7.912457912457913,
+      "avgConfidence": 48.333333333333336,
+      "avgProcessTime": 219,
+      "maxAccuracy": 9.090909090909092,
+      "minAccuracy": 5.555555555555555,
+      "testsRun": 3,
+      "above80Count": 0,
+      "above60Count": 0
+    },
+    "German Single Word": {
+      "avgAccuracy": 7.912457912457913,
+      "avgConfidence": 48.333333333333336,
+      "avgProcessTime": 212.33333333333334,
+      "maxAccuracy": 9.090909090909092,
+      "minAccuracy": 5.555555555555555,
+      "testsRun": 3,
+      "above80Count": 0,
+      "above60Count": 0
+    },
+    "German Letters Only": {
+      "avgAccuracy": 7.912457912457913,
+      "avgConfidence": 48.333333333333336,
+      "avgProcessTime": 211.33333333333334,
+      "maxAccuracy": 9.090909090909092,
+      "minAccuracy": 5.555555555555555,
+      "testsRun": 3,
+      "above80Count": 0,
+      "above60Count": 0
+    }
+  },
+  "analysis": {
+    "totalImages": 3,
+    "totalTests": 36,
+    "successfulTests": 36,
+    "testsAbove80": 0,
+    "testsAbove60": 0,
+    "bestPerImage": [
+      {
+        "image": "C 0100 FDN DE.png",
+        "bestAccuracy": 19.047619047619047,
+        "bestConfig": "German Sharpen"
+      },
+      {
+        "image": "C 0214 FDN DE.png",
+        "bestAccuracy": 26.31578947368421,
+        "bestConfig": "German Inverted"
+      },
+      {
+        "image": "U 0125 FDN DE.png",
+        "bestAccuracy": 9.090909090909092,
+        "bestConfig": "German High Contrast"
+      }
+    ]
+  }
+}
