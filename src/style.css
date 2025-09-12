@@ -77,6 +77,7 @@ header h1 {
 }
 
 .camera-container {
+    height: 80vh;
     position: relative;
     display: flex;
     justify-content: center;
@@ -84,8 +85,7 @@ header h1 {
 }
 
 #video {
-    max-width: 100%;
-    max-height: 60vh;
+    max-height: 80vh;
     border-radius: 8px;
 }
 
@@ -94,13 +94,15 @@ header h1 {
     position: absolute;
     top: 50%;
     left: 50%;
+    height: 80vh;
     transform: translate(-50%, -50%);
     pointer-events: none;
 }
 
 .frame-border {
-    width: 300px;
-    height: 420px;
+    top: 5vh;
+    height: 70vh;
+    width: calc(0.71 * 70vh);
     border: 3px solid #e74c3c;
     border-radius: 12px;
     background: rgba(231, 76, 60, 0.1);
@@ -109,9 +111,9 @@ header h1 {
 
 .collector-area {
     position: absolute;
-    left: 2%;
-    bottom: 15%;
-    width: 12%;
+    left: 0;
+    top: 90%;
+    width: 20%;
     height: 8%;
     border: 2px dashed #f39c12;
     background: rgba(243, 156, 18, 0.2);

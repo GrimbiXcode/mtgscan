@@ -99,9 +99,10 @@ class MTGScanner {
             this.updateStatus('Sammlernummer wird extrahiert...', 60);
             const collectorCanvas = this.cropToCollectorNumberArea(cardCanvas);
 
+            // THIS STEP IS MADE IN 'performCollectorNumberOCRWithFallback'
             // Simple image processing for collector numbers
-            this.updateStatus('Bild wird optimiert...', 70);
-            this.processCollectorNumberImage(collectorCanvas);
+            //this.updateStatus('Bild wird optimiert...', 70);
+            //this.processCollectorNumberImage(collectorCanvas);
 
             // Store processed images for debugging
             this.lastCapturedImage = canvas.toDataURL();
@@ -201,29 +202,6 @@ class MTGScanner {
         return canvas;
     }
 
-    processImage(canvas) {
-        const ctx = canvas.getContext('2d');
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imageData.data;
-
-        // Convert to grayscale and enhance contrast
-        for (let i = 0; i < data.length; i += 4) {
-            // Grayscale conversion
-            const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-
-            // Simple contrast enhancement
-            const contrast = 1.5;
-            const enhanced = Math.max(0, Math.min(255, (gray - 128) * contrast + 128));
-
-            data[i] = enhanced;     // Red
-            data[i + 1] = enhanced; // Green
-            data[i + 2] = enhanced; // Blue
-            // Alpha stays the same
-        }
-
-        ctx.putImageData(imageData, 0, 0);
-    }
-
     processCollectorNumberImage(canvas) {
         const ctx = canvas.getContext('2d');
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -282,22 +260,23 @@ class MTGScanner {
     }
 
     // Fallback OCR strategy with multiple attempts
-    async performCollectorNumberOCRWithFallback(cardCanvas) {
+    async performCollectorNumberOCRWithFallback(collectorCanvas) {
+        this.processCollectorNumberImage(collectorCanvas);
         const strategies = [
             {
                 name: 'optimal',
-                cropFunc: () => this.cropToCollectorNumberArea(cardCanvas),
-                processFunc: (canvas) => { this.processCollectorNumberImage(canvas); return canvas; }
+                cropFunc: () => this.cropToCollectorNumberArea(collectorCanvas),
+                //processFunc: (canvas) => { this.processCollectorNumberImage(canvas); return canvas; }
             },
             {
                 name: 'wider',
-                cropFunc: () => this.cropToCollectorNumberAreaWider(cardCanvas),
-                processFunc: (canvas) => { this.processCollectorNumberImage(canvas); return canvas; }
+                cropFunc: () => this.cropToCollectorNumberAreaWider(collectorCanvas),
+                //processFunc: (canvas) => { this.processCollectorNumberImage(canvas); return canvas; }
             },
             {
                 name: 'offsetRight',
-                cropFunc: () => this.cropToCollectorNumberAreaOffset(cardCanvas),
-                processFunc: (canvas) => { this.processCollectorNumberImage(canvas); return canvas; }
+                cropFunc: () => this.cropToCollectorNumberAreaOffset(collectorCanvas),
+                //processFunc: (canvas) => { this.processCollectorNumberImage(canvas); return canvas; }
             }
         ];
 
@@ -308,8 +287,8 @@ class MTGScanner {
                 console.log(`Trying OCR strategy: ${strategy.name}`);
 
                 const cropCanvas = strategy.cropFunc();
-                const processedCanvas = strategy.processFunc(cropCanvas);
-                const ocrResult = await this.performCollectorNumberOCR(processedCanvas);
+                //const processedCanvas = strategy.processFunc(cropCanvas);
+                const ocrResult = await this.performCollectorNumberOCR(cropCanvas);
 
                 // Score the result
                 const score = this.scoreCollectorNumberResult(ocrResult);
@@ -377,9 +356,9 @@ class MTGScanner {
         let score = 0;
 
         // Check for collector number patterns
-        if (/^[A-Z]{3,4}\s+[CUMNR]\s+\d{3,4}$/.test(text)) {
+        if (/^[A-Z]{3,4}\s+[CUMNRTL]\s+\d{3,4}$/.test(text)) {
             score = 100; // Perfect format: "FDN U 0125"
-        } else if (/^[CUMNR]\s+\d{3,4}$/.test(text)) {
+        } else if (/^[CUMNRTL]\s+\d{3,4}$/.test(text)) {
             score = 90;  // Good format: "U 0125"
         } else if (/^\d{3,4}$/.test(text)) {
             score = 80;  // Just number: "0125"
@@ -387,13 +366,13 @@ class MTGScanner {
             score = 70;  // Set + number: "FDN 0125"
         } else if (/\d{3,4}/.test(text)) {
             score = 50;  // Contains 3-4 digits
-        } else if (/[CUMNR]/.test(text) && /\d/.test(text)) {
+        } else if (/[CUMNRTL]/.test(text) && /\d/.test(text)) {
             score = 40;  // Has rarity and some digits
         } else if (/\d{2}/.test(text)) {
             score = 30;  // At least 2 digits
         } else if (/\d/.test(text)) {
             score = 20;  // At least 1 digit
-        } else if (/[CUMNR]/.test(text)) {
+        } else if (/[CUMNRTL]/.test(text)) {
             score = 10;  // At least has rarity
         }
 
@@ -489,9 +468,9 @@ class MTGScanner {
         // Try different patterns for collector numbers
         const patterns = [
             // Pattern: "FDN U 0125" (set code + rarity + number)
-            /^([A-Z0-9]{3,4})\s+[CUMNR]\s+(\d{1,4}[A-Z]?)$/,
+            /^([A-Z0-9]{3,4})\s+[CUMNRTL]\s+(\d{1,4}[A-Z]?)$/,
             // Pattern: "U 0125" (rarity + number, no set)
-            /^[CUMNR]\s+(\d{1,4}[A-Z]?)$/,
+            /^[CUMNRTL]\s+(\d{1,4}[A-Z]?)$/,
             // Pattern: "0125" (just number)
             /^(\d{1,4}[A-Z]?)$/,
             // Pattern: "FDN 125" (set + number)
