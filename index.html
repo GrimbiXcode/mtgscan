@@ -11,12 +11,10 @@
         <header>
             <h1>🎴 MTG Scanner</h1>
             <div class="controls">
-                <select id="languageSelect">
-                    <option value="eng">English</option>
-                    <option value="deu">Deutsch</option>
-                    <option value="fra">Français</option>
-                    <option value="spa">Español</option>
-                </select>
+                <span class="scanner-info">
+                    <span class="method-badge">🔢 Collector Number Recognition</span>
+                    <span class="language-note">Language Independent</span>
+                </span>
             </div>
         </header>
 
@@ -27,12 +25,12 @@
                     <video id="video" autoplay playsinline></video>
                     <div class="card-frame">
                         <div class="frame-border">
-                            <div class="name-area">Card Name Area</div>
+                            <div class="collector-area">Collector Number</div>
                         </div>
                     </div>
                     <canvas id="canvas" hidden></canvas>
                 </div>
-                
+
                 <div class="camera-controls">
                     <button id="startCamera" class="btn primary">📷 Kamera starten</button>
                     <button id="captureCard" class="btn" disabled>📸 Karte scannen</button>
@@ -50,16 +48,30 @@
             </section>
 
             <!-- Results Section -->
-            <section id="resultsSection" class="results-section" hidden>
+            <section id="resultsSection" class="results-section">
                 <h3>📋 Erkannte Karte</h3>
                 <div class="result-card">
                     <img id="resultImage" alt="Card">
                     <div class="result-info">
                         <h4 id="resultName">-</h4>
                         <p id="resultSet">-</p>
+                        <p id="resultDetails" class="debug-text"></p>
                         <div class="result-actions">
                             <button id="addCard" class="btn success">➕ Hinzufügen</button>
                             <button id="retryOcr" class="btn">🔄 Erneut scannen</button>
+                        </div>
+                        <div class="debug-images">
+                            <h5>🔧 Debug Images:</h5>
+                            <div class="debug-buttons">
+                                <button onclick="mtgScanner.showCapturedImage()" class="btn small">📷 Original</button>
+                                <button onclick="mtgScanner.showCardImage()" class="btn small">🎴 Card</button>
+                                <button onclick="mtgScanner.showCollectorImage()" class="btn small">🔢 Collector</button>
+                            </div>
+                            <div class="debug-image-display" id="debugImageDisplay" hidden>
+                                <h6 id="debugImageTitle">Debug Image</h6>
+                                <img id="debugImage" alt="Debug Image">
+                                <button onclick="mtgScanner.hideDebugImage()" class="btn small">✕ Close</button>
+                            </div>
                         </div>
                     </div>
                 </div>

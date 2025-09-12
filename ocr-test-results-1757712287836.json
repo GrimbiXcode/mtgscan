@@ -1,0 +1,448 @@
+{
+  "timestamp": "2025-09-12T21:24:47.835Z",
+  "testDirectory": "./test-images-ocr",
+  "configurations": [
+    {
+      "name": "English Default",
+      "lang": "eng",
+      "psm": "6",
+      "oem": "3"
+    },
+    {
+      "name": "English Single Line",
+      "lang": "eng",
+      "psm": "7",
+      "oem": "3"
+    },
+    {
+      "name": "English Single Word",
+      "lang": "eng",
+      "psm": "8",
+      "oem": "3"
+    },
+    {
+      "name": "English LSTM Only",
+      "lang": "eng",
+      "psm": "6",
+      "oem": "1"
+    },
+    {
+      "name": "German Default",
+      "lang": "deu",
+      "psm": "6",
+      "oem": "3"
+    },
+    {
+      "name": "German Single Line",
+      "lang": "deu",
+      "psm": "7",
+      "oem": "3"
+    },
+    {
+      "name": "German LSTM Only",
+      "lang": "deu",
+      "psm": "6",
+      "oem": "1"
+    },
+    {
+      "name": "English+German",
+      "lang": "eng+deu",
+      "psm": "6",
+      "oem": "3"
+    },
+    {
+      "name": "English+German Single Line",
+      "lang": "eng+deu",
+      "psm": "7",
+      "oem": "3"
+    },
+    {
+      "name": "English Alphanumeric",
+      "lang": "eng",
+      "psm": "7",
+      "oem": "3",
+      "whitelist": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 '-,."
+    },
+    {
+      "name": "German Alphanumeric",
+      "lang": "deu",
+      "psm": "7",
+      "oem": "3",
+      "whitelist": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÄÖÜäöüß0123456789 '-,."
+    }
+  ],
+  "results": [
+    {
+      "imageFile": "C 0100 FDN DE.png",
+      "expectedText": "Tierlieber Waldläufer",
+      "results": [
+        {
+          "config": "English Default",
+          "expectedText": "Tierlieber Waldläufer",
+          "recognizedText": "Rss c 0100 FON + DE |",
+          "accuracy": 4.761904761904762,
+          "processTime": 206,
+          "success": true
+        },
+        {
+          "config": "English Single Line",
+          "expectedText": "Tierlieber Waldläufer",
+          "recognizedText": "Rss c 0100 FON + DE |",
+          "accuracy": 4.761904761904762,
+          "processTime": 207,
+          "success": true
+        },
+        {
+          "config": "English Single Word",
+          "expectedText": "Tierlieber Waldläufer",
+          "recognizedText": "Rss c 0100 FON + DE |",
+          "accuracy": 4.761904761904762,
+          "processTime": 208,
+          "success": true
+        },
+        {
+          "config": "English LSTM Only",
+          "expectedText": "Tierlieber Waldläufer",
+          "recognizedText": "Rss c 0100 FON + DE |",
+          "accuracy": 4.761904761904762,
+          "processTime": 202,
+          "success": true
+        },
+        {
+          "config": "German Default",
+          "expectedText": "Tierlieber Waldläufer",
+          "recognizedText": "AS C 0100 FON + DE",
+          "accuracy": 9.523809523809524,
+          "processTime": 210,
+          "success": true
+        },
+        {
+          "config": "German Single Line",
+          "expectedText": "Tierlieber Waldläufer",
+          "recognizedText": "AS C 0100 FON + DE",
+          "accuracy": 9.523809523809524,
+          "processTime": 209,
+          "success": true
+        },
+        {
+          "config": "German LSTM Only",
+          "expectedText": "Tierlieber Waldläufer",
+          "recognizedText": "AS C 0100 FON + DE",
+          "accuracy": 9.523809523809524,
+          "processTime": 206,
+          "success": true
+        },
+        {
+          "config": "English+German",
+          "expectedText": "Tierlieber Waldläufer",
+          "recognizedText": "Rss c 0100 FON + DE |",
+          "accuracy": 4.761904761904762,
+          "processTime": 316,
+          "success": true
+        },
+        {
+          "config": "English+German Single Line",
+          "expectedText": "Tierlieber Waldläufer",
+          "recognizedText": "Rss c 0100 FON + DE |",
+          "accuracy": 4.761904761904762,
+          "processTime": 315,
+          "success": true
+        },
+        {
+          "config": "English Alphanumeric",
+          "expectedText": "Tierlieber Waldläufer",
+          "recognizedText": "Rss c 0100 FON + DE |",
+          "accuracy": 4.761904761904762,
+          "processTime": 245,
+          "success": true
+        },
+        {
+          "config": "German Alphanumeric",
+          "expectedText": "Tierlieber Waldläufer",
+          "recognizedText": "AS C 0100 FON + DE",
+          "accuracy": 9.523809523809524,
+          "processTime": 231,
+          "success": true
+        }
+      ]
+    },
+    {
+      "imageFile": "C 0214 FDN DE.png",
+      "expectedText": "Gebrochene Flügel",
+      "results": [
+        {
+          "config": "English Default",
+          "expectedText": "Gebrochene Flügel",
+          "recognizedText": "— c 0214 FON «DE",
+          "accuracy": 5.88235294117647,
+          "processTime": 199,
+          "success": true
+        },
+        {
+          "config": "English Single Line",
+          "expectedText": "Gebrochene Flügel",
+          "recognizedText": "— c 0214 FON «DE",
+          "accuracy": 5.88235294117647,
+          "processTime": 199,
+          "success": true
+        },
+        {
+          "config": "English Single Word",
+          "expectedText": "Gebrochene Flügel",
+          "recognizedText": "— c 0214 FON «DE",
+          "accuracy": 5.88235294117647,
+          "processTime": 199,
+          "success": true
+        },
+        {
+          "config": "English LSTM Only",
+          "expectedText": "Gebrochene Flügel",
+          "recognizedText": "— c 0214 FON «DE",
+          "accuracy": 5.88235294117647,
+          "processTime": 198,
+          "success": true
+        },
+        {
+          "config": "German Default",
+          "expectedText": "Gebrochene Flügel",
+          "recognizedText": "VE C 0214 FON -DE NM",
+          "accuracy": 15,
+          "processTime": 209,
+          "success": true
+        },
+        {
+          "config": "German Single Line",
+          "expectedText": "Gebrochene Flügel",
+          "recognizedText": "VE C 0214 FON -DE NM",
+          "accuracy": 15,
+          "processTime": 209,
+          "success": true
+        },
+        {
+          "config": "German LSTM Only",
+          "expectedText": "Gebrochene Flügel",
+          "recognizedText": "VE C 0214 FON -DE NM",
+          "accuracy": 15,
+          "processTime": 207,
+          "success": true
+        },
+        {
+          "config": "English+German",
+          "expectedText": "Gebrochene Flügel",
+          "recognizedText": "— C 0214 FON «DE NM",
+          "accuracy": 5.263157894736842,
+          "processTime": 301,
+          "success": true
+        },
+        {
+          "config": "English+German Single Line",
+          "expectedText": "Gebrochene Flügel",
+          "recognizedText": "— C 0214 FON «DE NM",
+          "accuracy": 5.263157894736842,
+          "processTime": 296,
+          "success": true
+        },
+        {
+          "config": "English Alphanumeric",
+          "expectedText": "Gebrochene Flügel",
+          "recognizedText": "— c 0214 FON «DE",
+          "accuracy": 5.88235294117647,
+          "processTime": 193,
+          "success": true
+        },
+        {
+          "config": "German Alphanumeric",
+          "expectedText": "Gebrochene Flügel",
+          "recognizedText": "VE C 0214 FON -DE NM",
+          "accuracy": 15,
+          "processTime": 203,
+          "success": true
+        }
+      ]
+    },
+    {
+      "imageFile": "U 0125 FDN DE.png",
+      "expectedText": "Wächter des Kreislaufs",
+      "results": [
+        {
+          "config": "English Default",
+          "expectedText": "Wächter des Kreislaufs",
+          "recognizedText": "— Uv 0128 FON + DE |",
+          "accuracy": 4.545454545454546,
+          "processTime": 198,
+          "success": true
+        },
+        {
+          "config": "English Single Line",
+          "expectedText": "Wächter des Kreislaufs",
+          "recognizedText": "— Uv 0128 FON + DE |",
+          "accuracy": 4.545454545454546,
+          "processTime": 193,
+          "success": true
+        },
+        {
+          "config": "English Single Word",
+          "expectedText": "Wächter des Kreislaufs",
+          "recognizedText": "— Uv 0128 FON + DE |",
+          "accuracy": 4.545454545454546,
+          "processTime": 192,
+          "success": true
+        },
+        {
+          "config": "English LSTM Only",
+          "expectedText": "Wächter des Kreislaufs",
+          "recognizedText": "— Uv 0128 FON + DE |",
+          "accuracy": 4.545454545454546,
+          "processTime": 192,
+          "success": true
+        },
+        {
+          "config": "German Default",
+          "expectedText": "Wächter des Kreislaufs",
+          "recognizedText": "LER U 0125 FDN +DE |",
+          "accuracy": 4.545454545454546,
+          "processTime": 212,
+          "success": true
+        },
+        {
+          "config": "German Single Line",
+          "expectedText": "Wächter des Kreislaufs",
+          "recognizedText": "LER U 0125 FDN +DE |",
+          "accuracy": 4.545454545454546,
+          "processTime": 212,
+          "success": true
+        },
+        {
+          "config": "German LSTM Only",
+          "expectedText": "Wächter des Kreislaufs",
+          "recognizedText": "LER U 0125 FDN +DE |",
+          "accuracy": 4.545454545454546,
+          "processTime": 209,
+          "success": true
+        },
+        {
+          "config": "English+German",
+          "expectedText": "Wächter des Kreislaufs",
+          "recognizedText": "— U 0128 FON + DE |",
+          "accuracy": 4.545454545454546,
+          "processTime": 311,
+          "success": true
+        },
+        {
+          "config": "English+German Single Line",
+          "expectedText": "Wächter des Kreislaufs",
+          "recognizedText": "— U 0128 FON + DE |",
+          "accuracy": 4.545454545454546,
+          "processTime": 306,
+          "success": true
+        },
+        {
+          "config": "English Alphanumeric",
+          "expectedText": "Wächter des Kreislaufs",
+          "recognizedText": "— Uv 0128 FON + DE |",
+          "accuracy": 4.545454545454546,
+          "processTime": 195,
+          "success": true
+        },
+        {
+          "config": "German Alphanumeric",
+          "expectedText": "Wächter des Kreislaufs",
+          "recognizedText": "LER U 0125 FDN +DE |",
+          "accuracy": 4.545454545454546,
+          "processTime": 206,
+          "success": true
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "English Default": {
+      "avgAccuracy": 5.063237416178592,
+      "maxAccuracy": 5.88235294117647,
+      "minAccuracy": 4.545454545454546,
+      "testsRun": 3,
+      "above80Count": 0,
+      "above80Percent": 0
+    },
+    "English Single Line": {
+      "avgAccuracy": 5.063237416178592,
+      "maxAccuracy": 5.88235294117647,
+      "minAccuracy": 4.545454545454546,
+      "testsRun": 3,
+      "above80Count": 0,
+      "above80Percent": 0
+    },
+    "English Single Word": {
+      "avgAccuracy": 5.063237416178592,
+      "maxAccuracy": 5.88235294117647,
+      "minAccuracy": 4.545454545454546,
+      "testsRun": 3,
+      "above80Count": 0,
+      "above80Percent": 0
+    },
+    "English LSTM Only": {
+      "avgAccuracy": 5.063237416178592,
+      "maxAccuracy": 5.88235294117647,
+      "minAccuracy": 4.545454545454546,
+      "testsRun": 3,
+      "above80Count": 0,
+      "above80Percent": 0
+    },
+    "German Default": {
+      "avgAccuracy": 9.689754689754691,
+      "maxAccuracy": 15,
+      "minAccuracy": 4.545454545454546,
+      "testsRun": 3,
+      "above80Count": 0,
+      "above80Percent": 0
+    },
+    "German Single Line": {
+      "avgAccuracy": 9.689754689754691,
+      "maxAccuracy": 15,
+      "minAccuracy": 4.545454545454546,
+      "testsRun": 3,
+      "above80Count": 0,
+      "above80Percent": 0
+    },
+    "German LSTM Only": {
+      "avgAccuracy": 9.689754689754691,
+      "maxAccuracy": 15,
+      "minAccuracy": 4.545454545454546,
+      "testsRun": 3,
+      "above80Count": 0,
+      "above80Percent": 0
+    },
+    "English+German": {
+      "avgAccuracy": 4.8568390673653825,
+      "maxAccuracy": 5.263157894736842,
+      "minAccuracy": 4.545454545454546,
+      "testsRun": 3,
+      "above80Count": 0,
+      "above80Percent": 0
+    },
+    "English+German Single Line": {
+      "avgAccuracy": 4.8568390673653825,
+      "maxAccuracy": 5.263157894736842,
+      "minAccuracy": 4.545454545454546,
+      "testsRun": 3,
+      "above80Count": 0,
+      "above80Percent": 0
+    },
+    "English Alphanumeric": {
+      "avgAccuracy": 5.063237416178592,
+      "maxAccuracy": 5.88235294117647,
+      "minAccuracy": 4.545454545454546,
+      "testsRun": 3,
+      "above80Count": 0,
+      "above80Percent": 0
+    },
+    "German Alphanumeric": {
+      "avgAccuracy": 9.689754689754691,
+      "maxAccuracy": 15,
+      "minAccuracy": 4.545454545454546,
+      "testsRun": 3,
+      "above80Count": 0,
+      "above80Percent": 0
+    }
+  }
+}
