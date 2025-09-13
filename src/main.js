@@ -10,6 +10,7 @@ class MTGScanner {
 
     this.initElements();
     this.initEventListeners();
+    this.initFrameSize();
     this.updateCardCount();
     this.renderCollection();
     this.initCollectionRecognitions();
@@ -37,6 +38,10 @@ class MTGScanner {
     this.cardList = document.getElementById('cardList');
     this.exportCollectionBtn = document.getElementById('exportCollection');
     this.clearCollectionBtn = document.getElementById('clearCollection');
+    
+    // Frame size controls
+    this.frameSizeSlider = document.getElementById('frameSizeSlider');
+    this.frameSizeValue = document.getElementById('frameSizeValue');
   }
 
   initEventListeners() {
@@ -51,6 +56,44 @@ class MTGScanner {
 
     this.exportCollectionBtn.addEventListener('click', () => this.exportCollection());
     this.clearCollectionBtn.addEventListener('click', () => this.clearCollection());
+    
+    // Frame size control
+    this.frameSizeSlider.addEventListener('input', (e) => this.updateFrameSize(parseFloat(e.target.value)));
+  }
+
+  initFrameSize() {
+    // Load saved frame size from localStorage or use default
+    const savedFrameSize = localStorage.getItem('mtg-scanner-frame-size');
+    const frameSize = savedFrameSize ? parseFloat(savedFrameSize) : 1.0;
+    
+    this.frameSizeSlider.value = frameSize;
+    this.updateFrameSize(frameSize);
+  }
+
+  updateFrameSize(scale) {
+    // Update CSS variable for frame scale
+    document.documentElement.style.setProperty('--frame-scale', scale);
+    
+    // Update the display value
+    let sizeText = 'Medium';
+    if (scale <= 0.7) {
+      sizeText = 'Klein';
+    } else if (scale <= 0.9) {
+      sizeText = 'Klein-Medium';
+    } else if (scale <= 1.1) {
+      sizeText = 'Medium';
+    } else if (scale <= 1.4) {
+      sizeText = 'Medium-Groß';
+    } else {
+      sizeText = 'Groß';
+    }
+    
+    this.frameSizeValue.textContent = `${sizeText} (${scale.toFixed(1)}x)`;
+    
+    // Save to localStorage
+    localStorage.setItem('mtg-scanner-frame-size', scale.toString());
+    
+    console.log('Frame size updated:', scale);
   }
 
   initCollectionRecognitions() {
