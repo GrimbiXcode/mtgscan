@@ -79,7 +79,7 @@ class MTGScanner {
     this.decreaseQuantityBtn.addEventListener('click', () => this.decreaseCardQuantity());
     this.modalCloseBtn.addEventListener('click', () => this.hideCardModal());
     this.backToScannerBtn.addEventListener('click', () => this.hideCardModal());
-    
+
     // Close modal when clicking overlay
     this.cardModal.addEventListener('click', (e) => {
       if (e.target === this.cardModal) {
@@ -102,7 +102,7 @@ class MTGScanner {
     document.documentElement.style.setProperty('--frame-scale', scale);
 
     // Update the display value
-    let sizeText = 'Medium';
+    let sizeText;
     if (scale <= 0.7) {
       sizeText = 'Klein';
     } else if (scale <= 0.9) {
@@ -865,11 +865,11 @@ class MTGScanner {
   async showResults(cardData, cardImage, recognizedText = '') {
     // Hide processing section
     this.processingSection.style.display = 'none';
-    
+
     // Store current card data
     this.currentCard = cardData;
     this.currentCardImage = cardImage.toDataURL();
-    
+
     // Show the card modal instead of inline results
     await this.showCardModal(cardData, recognizedText);
   }
@@ -879,7 +879,7 @@ class MTGScanner {
     // Set modal content
     this.modalCardName.textContent = cardData.name;
     this.modalCardSet.textContent = cardData.set;
-    
+
     // Show loading state for modal image
     this.modalCardImage.classList.add('loading');
     this.modalCardImage.src = 'data:image/svg+xml;base64,' + btoa(
@@ -891,8 +891,7 @@ class MTGScanner {
 
     // Load and display the card image
     try {
-      const imageUrl = await this.fetchCardImage(cardData.image);
-      this.modalCardImage.src = imageUrl;
+      this.modalCardImage.src = await this.fetchCardImage(cardData.image);
       this.modalCardImage.classList.remove('loading');
     } catch (error) {
       console.error('Error fetching card image for modal:', error);
@@ -907,10 +906,10 @@ class MTGScanner {
 
     // Update quantity display
     this.updateModalQuantityDisplay(cardData);
-    
+
     // Show the modal
     this.cardModal.removeAttribute('hidden');
-    
+
     // Focus management for accessibility
     setTimeout(() => {
       this.modalCloseBtn.focus();
@@ -924,7 +923,7 @@ class MTGScanner {
   updateModalQuantityDisplay(cardData) {
     const quantity = this.getCardQuantity(cardData.id);
     this.currentQuantity.textContent = quantity;
-    
+
     // Enable/disable decrease button based on quantity
     this.decreaseQuantityBtn.disabled = quantity === 0;
   }
@@ -936,9 +935,9 @@ class MTGScanner {
 
   increaseCardQuantity() {
     if (!this.currentCard) return;
-    
+
     const existingCard = this.cards.find(c => c.id === this.currentCard.id);
-    
+
     if (existingCard) {
       existingCard.count = (existingCard.count || 1) + 1;
       this.showSuccess(`Added another copy. You now have ${existingCard.count} copies of "${this.currentCard.name}".`);
@@ -950,7 +949,7 @@ class MTGScanner {
       });
       this.showSuccess(`"${this.currentCard.name}" wurde zur Sammlung hinzugefügt!`);
     }
-    
+
     this.saveCollection();
     this.updateCardCount();
     this.renderCollection();
@@ -959,9 +958,9 @@ class MTGScanner {
 
   decreaseCardQuantity() {
     if (!this.currentCard) return;
-    
+
     const existingCard = this.cards.find(c => c.id === this.currentCard.id);
-    
+
     if (!existingCard || existingCard.count <= 1) {
       // Remove the card entirely
       this.cards = this.cards.filter(c => c.id !== this.currentCard.id);
@@ -970,7 +969,7 @@ class MTGScanner {
       existingCard.count -= 1;
       this.showInfo(`Reduced quantity. You now have ${existingCard.count} copies of "${this.currentCard.name}".`);
     }
-    
+
     this.saveCollection();
     this.updateCardCount();
     this.renderCollection();
@@ -1009,7 +1008,7 @@ class MTGScanner {
     // Calculate total cards including quantities
     const totalCards = this.cards.reduce((sum, card) => sum + (card.count || 1), 0);
     const uniqueCards = this.cards.length;
-    
+
     // Display both unique cards and total quantity
     this.cardCount.textContent = `${uniqueCards} (${totalCards} total)`;
   }
@@ -1038,8 +1037,7 @@ class MTGScanner {
 
       // Fetch and set the image asynchronously
       try {
-        const imageUrl = await this.fetchCardImage(card.image);
-        imgElement.src = imageUrl;
+        imgElement.src = await this.fetchCardImage(card.image);
         imgElement.removeAttribute('data-loading');
       } catch (error) {
         console.error(`Error fetching image for ${card.name}:`, error);
