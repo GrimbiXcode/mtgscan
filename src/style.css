@@ -67,6 +67,15 @@ header h1 {
     background: #e74c3c;
 }
 
+.btn.secondary {
+    background: #95a5a6;
+    border: 2px solid #7f8c8d;
+}
+
+.btn.secondary:hover:not(:disabled) {
+    background: #7f8c8d;
+}
+
 /* Camera Section */
 .camera-section {
     background: white;
@@ -131,6 +140,14 @@ header h1 {
     gap: 1rem;
     justify-content: center;
     flex-wrap: wrap;
+    align-items: center;
+}
+
+.upload-divider {
+    color: #7f8c8d;
+    font-style: italic;
+    padding: 0 0.5rem;
+    font-size: 0.9rem;
 }
 
 /* Controls styling */

@@ -1,589 +1,820 @@
 // Simple MTG Scanner - Main Application
 class MTGScanner {
-    constructor() {
-        this.video = document.getElementById('video');
-        this.canvas = document.getElementById('canvas');
-        this.stream = null;
-        this.isProcessing = false;
-        this.cards = JSON.parse(localStorage.getItem('mtg-collection') || '[]');
+  constructor() {
+    this.video = document.getElementById('video');
+    this.canvas = document.getElementById('canvas');
+    this.stream = null;
+    this.isProcessing = false;
+    this.cards = JSON.parse(localStorage.getItem('mtg-collection') || '[]');
+    this.collectorImages = [];
 
-        this.initElements();
-        this.initEventListeners();
-        this.updateCardCount();
-        this.renderCollection();
+    this.initElements();
+    this.initEventListeners();
+    this.updateCardCount();
+    this.renderCollection();
+    this.initCollectionRecognitions();
+  }
+
+  initElements() {
+    this.startCameraBtn = document.getElementById('startCamera');
+    this.captureCardBtn = document.getElementById('captureCard');
+    this.stopCameraBtn = document.getElementById('stopCamera');
+    this.uploadCardBtn = document.getElementById('uploadCard');
+    this.fileInput = document.getElementById('fileInput');
+
+    this.processingSection = document.getElementById('processingSection');
+    this.resultsSection = document.getElementById('resultsSection');
+    this.progressBar = document.getElementById('progressBar');
+    this.statusText = document.getElementById('statusText');
+
+    this.resultImage = document.getElementById('resultImage');
+    this.resultName = document.getElementById('resultName');
+    this.resultSet = document.getElementById('resultSet');
+    this.addCardBtn = document.getElementById('addCard');
+    this.retryOcrBtn = document.getElementById('retryOcr');
+
+    this.cardCount = document.getElementById('cardCount');
+    this.cardList = document.getElementById('cardList');
+    this.exportCollectionBtn = document.getElementById('exportCollection');
+    this.clearCollectionBtn = document.getElementById('clearCollection');
+  }
+
+  initEventListeners() {
+    this.startCameraBtn.addEventListener('click', () => this.startCamera());
+    this.captureCardBtn.addEventListener('click', () => this.captureCard());
+    this.stopCameraBtn.addEventListener('click', () => this.stopCamera());
+    this.uploadCardBtn.addEventListener('click', () => this.triggerFileUpload());
+    this.fileInput.addEventListener('change', (e) => this.handleFileUpload(e));
+
+    this.addCardBtn.addEventListener('click', () => this.addCardToCollection());
+    this.retryOcrBtn.addEventListener('click', () => this.retryOcr());
+
+    this.exportCollectionBtn.addEventListener('click', () => this.exportCollection());
+    this.clearCollectionBtn.addEventListener('click', () => this.clearCollection());
+  }
+
+  initCollectionRecognitions() {
+    this.collectionRegex;
+
+    // load collection regex from local storage
+    const collectionRegexTimestamp = localStorage.getItem('collectionRegexTimestamp');
+    if (collectionRegexTimestamp && Date.now() - parseInt(collectionRegexTimestamp) < 24 * 60 * 60 * 1000) {
+      const collectionRegexSource = localStorage.getItem('collectionRegex');
+      if (collectionRegexSource) {
+        this.collectionRegex = new RegExp(collectionRegexSource);
+        console.log('Collection Regex loaded from local storage.');
+        console.log(this.collectionRegex);
+        return
+      } else {
+        console.warn('Collection Regex not found in local storage.');
+        console.warn('Loading collections from scryfall...');
+      }
     }
 
-    initElements() {
-        this.startCameraBtn = document.getElementById('startCamera');
-        this.captureCardBtn = document.getElementById('captureCard');
-        this.stopCameraBtn = document.getElementById('stopCamera');
 
-        this.processingSection = document.getElementById('processingSection');
-        this.resultsSection = document.getElementById('resultsSection');
-        this.progressBar = document.getElementById('progressBar');
-        this.statusText = document.getElementById('statusText');
+    // load all collections from scryfall
+    fetch('https://api.scryfall.com/sets?order=set&dir=asc&format=json')
+    .then(response => response.json())
+    .then(data => {
+      console.log(data);
+      const codes = data.data.map(set => set.code.toUpperCase());
+      this.collectionRegex = new RegExp(`(?<collection>${codes.join('|')})`);
+      console.log(`Collection Regex generated. Found ${codes.length} collections.`);
+      console.log(this.collectionRegex);
 
-        this.resultImage = document.getElementById('resultImage');
-        this.resultName = document.getElementById('resultName');
-        this.resultSet = document.getElementById('resultSet');
-        this.addCardBtn = document.getElementById('addCard');
-        this.retryOcrBtn = document.getElementById('retryOcr');
+      // save it to local storage
+      localStorage.setItem('collectionRegex', this.collectionRegex.source);
+      localStorage.setItem('collectionRegexTimestamp', Date.now().toString());
+      console.log('Collection Regex saved to local storage.');
+    })
+    .catch(error => console.error('Error fetching collections:', error));
 
-        this.cardCount = document.getElementById('cardCount');
-        this.cardList = document.getElementById('cardList');
-        this.exportCollectionBtn = document.getElementById('exportCollection');
-        this.clearCollectionBtn = document.getElementById('clearCollection');
-    }
+  }
 
-    initEventListeners() {
-        this.startCameraBtn.addEventListener('click', () => this.startCamera());
-        this.captureCardBtn.addEventListener('click', () => this.captureCard());
-        this.stopCameraBtn.addEventListener('click', () => this.stopCamera());
-
-        this.addCardBtn.addEventListener('click', () => this.addCardToCollection());
-        this.retryOcrBtn.addEventListener('click', () => this.retryOcr());
-
-        this.exportCollectionBtn.addEventListener('click', () => this.exportCollection());
-        this.clearCollectionBtn.addEventListener('click', () => this.clearCollection());
-    }
-
-    async startCamera() {
-        try {
-            this.stream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    facingMode: 'environment',
-                    width: { ideal: 1920 },
-                    height: { ideal: 1280 }
-                }
-            });
-
-            this.video.srcObject = this.stream;
-
-            this.startCameraBtn.disabled = true;
-            this.captureCardBtn.disabled = false;
-            this.stopCameraBtn.disabled = false;
-
-        } catch (error) {
-            alert('Kamera konnte nicht gestartet werden: ' + error.message);
+  async startCamera() {
+    try {
+      this.stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'environment',
+          width: { ideal: 1920 },
+          height: { ideal: 1280 }
         }
+      });
+
+      this.video.srcObject = this.stream;
+
+      this.startCameraBtn.disabled = true;
+      this.captureCardBtn.disabled = false;
+      this.stopCameraBtn.disabled = false;
+
+    } catch (error) {
+      alert('Kamera konnte nicht gestartet werden: ' + error.message);
+    }
+  }
+
+  stopCamera() {
+    if (this.stream) {
+      this.stream.getTracks().forEach(track => track.stop());
+      this.stream = null;
     }
 
-    stopCamera() {
-        if (this.stream) {
-            this.stream.getTracks().forEach(track => track.stop());
-            this.stream = null;
-        }
+    this.startCameraBtn.disabled = false;
+    this.captureCardBtn.disabled = true;
+    this.stopCameraBtn.disabled = true;
+  }
 
-        this.startCameraBtn.disabled = false;
-        this.captureCardBtn.disabled = true;
-        this.stopCameraBtn.disabled = true;
+  // Upload methods
+  triggerFileUpload() {
+    this.fileInput.click();
+  }
+
+  async handleFileUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Bitte wählen Sie eine Bilddatei aus.');
+      return;
     }
 
+    try {
+      // Create canvas from uploaded image
+      const canvas = await this.createCanvasFromFile(file);
 
-    async captureCardByCollectorNumber() {
-        if (this.isProcessing) return;
-
-        try {
-            this.isProcessing = true;
-            this.showProcessing(true);
-            this.updateStatus('Bild wird aufgenommen...', 20);
-
-            // Capture image from video
-            const canvas = this.captureFromVideo();
-
-            // Crop to card frame
-            this.updateStatus('Karte wird zugeschnitten...', 40);
-            const cardCanvas = this.cropToCardFrame(canvas);
-
-            // Crop to collector number area (bottom left)
-            this.updateStatus('Sammlernummer wird extrahiert...', 60);
-            const collectorCanvas = this.cropToCollectorNumberArea(cardCanvas);
-
-            // THIS STEP IS MADE IN 'performCollectorNumberOCRWithFallback'
-            // Simple image processing for collector numbers
-            //this.updateStatus('Bild wird optimiert...', 70);
-            //this.processCollectorNumberImage(collectorCanvas);
-
-            // Store processed images for debugging
-            this.lastCapturedImage = canvas.toDataURL();
-            this.lastCardImage = cardCanvas.toDataURL();
-            this.lastCollectorImage = collectorCanvas.toDataURL();
-
-            // OCR for collector number with fallback strategy
-            this.updateStatus('Sammlernummer wird erkannt...', 80);
-            const collectorInfo = await this.performCollectorNumberOCRWithFallback(collectorCanvas);
-
-            // Search card by collector number
-            this.updateStatus('Karte wird gesucht...', 90);
-            const cardData = await this.searchCardByCollectorNumber(collectorInfo);
-
-            this.updateStatus('Fertig!', 100);
-
-            if (cardData) {
-                this.showResults(cardData, cardCanvas, `Sammlernummer: ${collectorInfo}`);
-            } else {
-                alert(`Karte mit Sammlernummer "${collectorInfo}" wurde nicht gefunden.`);
-                // Show results anyway for debugging
-                this.showResults({
-                    name: `Unbekannte Karte (${collectorInfo})`,
-                    set: 'Nicht gefunden',
-                    image: '/assets/default-card.png'
-                }, cardCanvas, collectorInfo);
-            }
-
-        } catch (error) {
-            alert('Fehler beim Scannen: ' + error.message);
-        } finally {
-            this.isProcessing = false;
-            this.showProcessing(false);
-        }
+      // Process the uploaded image using the same workflow as camera
+      await this.processUploadedImage(canvas);
+    } catch (error) {
+      alert('Fehler beim Verarbeiten des Bildes: ' + error.message);
     }
 
-    async captureCard() {
-        return this.captureCardByCollectorNumber();
-    }
+    // Clear the file input
+    event.target.value = '';
+  }
 
-    captureFromVideo() {
+  createCanvasFromFile(file) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
         const canvas = document.createElement('canvas');
-        canvas.width = this.video.videoWidth;
-        canvas.height = this.video.videoHeight;
+        canvas.width = img.width;
+        canvas.height = img.height;
 
         const ctx = canvas.getContext('2d');
-        ctx.drawImage(this.video, 0, 0);
+        ctx.drawImage(img, 0, 0);
 
-        return canvas;
+        resolve(canvas);
+      };
+      img.onerror = () => reject(new Error('Bild konnte nicht geladen werden'));
+      img.src = URL.createObjectURL(file);
+    });
+  }
+
+  async processUploadedImage(canvas) {
+    if (this.isProcessing) return;
+
+    try {
+      this.isProcessing = true;
+      this.showProcessing(true);
+      this.updateStatus('Hochgeladenes Bild wird verarbeitet...', 20);
+
+      // For uploaded images, we assume they are already cropped to show the card
+      // or we use the full image and try to find collector number area
+      const cardCanvas = this.smartCropUploadedImage(canvas);
+
+      // Crop to collector number area (bottom left)
+      //this.updateStatus('Sammlernummer wird extrahiert...', 60);
+      //const collectorCanvas = this.cropToCollectorNumberArea(cardCanvas);
+
+      // Store processed images for debugging
+      this.lastCapturedImage = canvas.toDataURL();
+      this.lastCardImage = cardCanvas.toDataURL();
+
+      // OCR for collector number with fallback strategy
+      this.updateStatus('Sammlernummer wird erkannt...', 80);
+      const collectorInfo = await this.performCollectorNumberOCRWithFallback(cardCanvas);
+
+      //this.lastCollectorImage = collectorCanvas.toDataURL();
+
+      // Search card by collector number
+      this.updateStatus('Karte wird gesucht...', 90);
+      const cardData = await this.searchCardByCollectorNumber(collectorInfo);
+
+      this.updateStatus('Fertig!', 100);
+
+      if (cardData) {
+        this.showResults(cardData, cardCanvas, `Sammlernummer: ${collectorInfo}`);
+      } else {
+        alert(`Karte mit Sammlernummer "${collectorInfo}" wurde nicht gefunden.`);
+        // Show results anyway for debugging
+        this.showResults({
+          name: `Unbekannte Karte (${collectorInfo})`,
+          set: 'Nicht gefunden',
+          image: '/assets/default-card.png'
+        }, cardCanvas, collectorInfo);
+      }
+
+    } catch (error) {
+      alert('Fehler beim Verarbeiten: ' + error.message);
+    } finally {
+      this.isProcessing = false;
+      this.showProcessing(false);
+    }
+  }
+
+  smartCropUploadedImage(canvas) {
+    // For uploaded images, we handle different scenarios:
+    // 1. Image is already a close-up of a card
+    // 2. Image contains a card among other things
+    //
+    // We use a simple heuristic: if the image has a roughly card-like aspect ratio
+    // (around 2.5:3.5 or 0.71:1), we assume it's already a card image.
+    // Otherwise, we try to crop to center assuming the card is centered.
+
+    const aspectRatio = canvas.width / canvas.height;
+    const cardAspectRatio = 0.71; // Standard MTG card ratio
+
+    // If already close to card aspect ratio (within 20% tolerance), use as-is
+    if (Math.abs(aspectRatio - cardAspectRatio) / cardAspectRatio < 0.3) {
+      console.log('Image appears to be already cropped to card, using as-is');
+      return canvas;
     }
 
-    cropToCardFrame(sourceCanvas) {
-        // Calculate card frame position based on video dimensions
-        const videoRect = this.video.getBoundingClientRect();
-        const scaleX = sourceCanvas.width / videoRect.width;
-        const scaleY = sourceCanvas.height / videoRect.height;
+    // Otherwise, try to crop to center with card proportions
+    console.log('Image appears to contain more than just card, cropping to center');
+    return this.cropToCardProportions(canvas);
+  }
 
-        // Card frame dimensions (300x420 from CSS, centered)
-        const frameWidth = 300 * scaleX;
-        const frameHeight = 420 * scaleY;
-        const frameX = (sourceCanvas.width - frameWidth) / 2;
-        const frameY = (sourceCanvas.height - frameHeight) / 2;
+  cropToCardProportions(sourceCanvas) {
+    // Crop to center of image with card proportions
+    const cardAspectRatio = 0.71; // width/height for MTG cards
 
-        const canvas = document.createElement('canvas');
-        canvas.width = frameWidth;
-        canvas.height = frameHeight;
+    let cropWidth, cropHeight;
 
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(
-            sourceCanvas,
-            frameX, frameY, frameWidth, frameHeight,
-            0, 0, frameWidth, frameHeight
-        );
-
-        return canvas;
+    // Determine crop dimensions based on source aspect ratio
+    if (sourceCanvas.width / sourceCanvas.height > cardAspectRatio) {
+      // Source is wider than card ratio - crop width
+      cropHeight = sourceCanvas.height;
+      cropWidth = cropHeight * cardAspectRatio;
+    } else {
+      // Source is taller than card ratio - crop height
+      cropWidth = sourceCanvas.width;
+      cropHeight = cropWidth / cardAspectRatio;
     }
 
+    // Center the crop
+    const cropX = (sourceCanvas.width - cropWidth) / 2;
+    const cropY = (sourceCanvas.height - cropHeight) / 2;
 
-    cropToCollectorNumberArea(cardCanvas) {
-        // OPTIMAL coordinates found via systematic testing: x=2%, y=85%, w=12%, h=8%
-        const cropHeight = Math.floor(cardCanvas.height * 0.080);
-        const cropWidth = Math.floor(cardCanvas.width * 0.200);
-        const startY = Math.floor(cardCanvas.height * 0.900);
-        const startX = Math.floor(cardCanvas.width * 0.001);
+    const canvas = document.createElement('canvas');
+    canvas.width = cropWidth;
+    canvas.height = cropHeight;
 
-        const canvas = document.createElement('canvas');
-        canvas.width = cropWidth;
-        canvas.height = cropHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(
+      sourceCanvas,
+      cropX, cropY, cropWidth, cropHeight,
+      0, 0, cropWidth, cropHeight
+    );
 
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(
-            cardCanvas,
-            startX, startY, cropWidth, cropHeight,
-            0, 0, cropWidth, cropHeight
-        );
+    return canvas;
+  }
 
-        return canvas;
+
+  async captureCardByCollectorNumber() {
+    if (this.isProcessing) return;
+
+    try {
+      this.isProcessing = true;
+      this.showProcessing(true);
+      this.updateStatus('Bild wird aufgenommen...', 20);
+
+      // Capture image from video
+      const canvas = this.captureFromVideo();
+
+      // Crop to card frame
+      this.updateStatus('Karte wird zugeschnitten...', 40);
+      const cardCanvas = this.cropToCardFrame(canvas);
+
+      // Crop to collector number area (bottom left)
+      //this.updateStatus('Sammlernummer wird extrahiert...', 60);
+      //const collectorCanvas = this.cropToCollectorNumberArea(cardCanvas);
+
+      // THIS STEP IS MADE IN 'performCollectorNumberOCRWithFallback'
+      // Simple image processing for collector numbers
+      //this.updateStatus('Bild wird optimiert...', 70);
+      //this.processCollectorNumberImage(collectorCanvas);
+
+      // Store processed images for debugging
+      this.lastCapturedImage = canvas.toDataURL();
+      this.lastCardImage = cardCanvas.toDataURL();
+
+      // OCR for collector number with fallback strategy
+      this.updateStatus('Sammlernummer wird erkannt...', 80);
+      const collectorInfo = await this.performCollectorNumberOCRWithFallback(cardCanvas);
+
+
+      // Search card by collector number
+      this.updateStatus('Karte wird gesucht...', 90);
+      const cardData = await this.searchCardByCollectorNumber(collectorInfo);
+
+      this.updateStatus('Fertig!', 100);
+
+      if (cardData) {
+        this.showResults(cardData, cardCanvas, `Sammlernummer: ${collectorInfo}`);
+      } else {
+        alert(`Karte mit Sammlernummer "${collectorInfo}" wurde nicht gefunden.`);
+        // Show results anyway for debugging
+        this.showResults({
+          name: `Unbekannte Karte (${collectorInfo})`,
+          set: 'Nicht gefunden',
+          image: '/assets/default-card.png'
+        }, cardCanvas, collectorInfo);
+      }
+
+    } catch (error) {
+      alert('Fehler beim Scannen: ' + error.message);
+    } finally {
+      this.isProcessing = false;
+      this.showProcessing(false);
+    }
+  }
+
+  async captureCard() {
+    return this.captureCardByCollectorNumber();
+  }
+
+  captureFromVideo() {
+    const canvas = document.createElement('canvas');
+    canvas.width = this.video.videoWidth;
+    canvas.height = this.video.videoHeight;
+
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(this.video, 0, 0);
+
+    return canvas;
+  }
+
+  cropToCardFrame(sourceCanvas) {
+    // Calculate card frame position based on video dimensions
+    const videoRect = this.video.getBoundingClientRect();
+    const scaleX = sourceCanvas.width / videoRect.width;
+    const scaleY = sourceCanvas.height / videoRect.height;
+
+    // Card frame dimensions (300x420 from CSS, centered)
+    const frameWidth = 300 * scaleX;
+    const frameHeight = 420 * scaleY;
+    const frameX = (sourceCanvas.width - frameWidth) / 2;
+    const frameY = (sourceCanvas.height - frameHeight) / 2;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = frameWidth;
+    canvas.height = frameHeight;
+
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(
+      sourceCanvas,
+      frameX, frameY, frameWidth, frameHeight,
+      0, 0, frameWidth, frameHeight
+    );
+
+    return canvas;
+  }
+
+
+  cropToCollectorNumberArea(cardCanvas) {
+    // OPTIMAL coordinates found via systematic testing: x=2%, y=85%, w=12%, h=8%
+    const cropHeight = Math.floor(cardCanvas.height * 0.080);
+    const cropWidth = Math.floor(cardCanvas.width * 0.200);
+    const startY = Math.floor(cardCanvas.height * 0.900);
+    const startX = Math.floor(cardCanvas.width * 0.001);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = cropWidth;
+    canvas.height = cropHeight;
+
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(
+      cardCanvas,
+      startX, startY, cropWidth, cropHeight,
+      0, 0, cropWidth, cropHeight
+    );
+
+    return canvas;
+  }
+
+  processCollectorNumberImage(canvas) {
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+
+    // High contrast inversion processing (optimal approach from testing)
+    for (let i = 0; i < data.length; i += 4) {
+      // Convert to grayscale
+      const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+
+      // High contrast enhancement (2.5x factor for better text separation)
+      const enhanced = Math.max(0, Math.min(255, (gray - 128) * 2.5 + 128));
+
+      // Invert colors: Tesseract works better with black text on white background
+      // Most MTG collector numbers are white text on dark background
+      const inverted = 255 - enhanced;
+
+      data[i] = inverted;     // Red
+      data[i + 1] = inverted; // Green
+      data[i + 2] = inverted; // Blue
+      // Alpha stays the same
     }
 
-    processCollectorNumberImage(canvas) {
-        const ctx = canvas.getContext('2d');
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imageData.data;
+    ctx.putImageData(imageData, 0, 0);
+    console.log('Applied high contrast collector number processing with color inversion');
+  }
 
-        // High contrast inversion processing (optimal approach from testing)
-        for (let i = 0; i < data.length; i += 4) {
-            // Convert to grayscale
-            const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
 
-            // High contrast enhancement (2.5x factor for better text separation)
-            const enhanced = Math.max(0, Math.min(255, (gray - 128) * 2.5 + 128));
+  // Clean OCR text to handle common issues like duplicated characters
+  cleanOCRText(rawText) {
+    if (!rawText) return '';
 
-            // Invert colors: Tesseract works better with black text on white background
-            // Most MTG collector numbers are white text on dark background
-            const inverted = 255 - enhanced;
+    let cleaned = rawText.trim().replace(/\s+/g, ' '); // Normalize whitespace
 
-            data[i] = inverted;     // Red
-            data[i + 1] = inverted; // Green
-            data[i + 2] = inverted; // Blue
-            // Alpha stays the same
+    // Handle duplicated rarity letters (Cc -> C, Uu -> U, etc.)
+    cleaned = cleaned.replace(/^([CUMNR])\1+/i, '$1'); // Remove duplicates at start
+    cleaned = cleaned.replace(/([CUMNR])\1+/gi, '$1');  // Remove duplicates anywhere
+
+    // Handle duplicated digits (00100 -> 0100, but keep legitimate leading zeros)
+    // Only remove duplicates that create obviously wrong patterns
+    cleaned = cleaned.replace(/(\d)\1{3,}/g, '$1'); // Remove 4+ repeated digits
+
+    // Clean up common OCR mistakes
+    cleaned = cleaned.replace(/[|\\]/g, '1');     // Pipes and backslashes -> 1
+    cleaned = cleaned.replace(/[O]/g, '0');        // Letter O -> number 0
+    cleaned = cleaned.replace(/[Il]/g, '1');       // I, l -> 1
+    cleaned = cleaned.replace(/[S]/g, '5');        // S -> 5 (sometimes)
+
+    // Remove non-alphanumeric except spaces and slashes
+    cleaned = cleaned.replace(/[^0-9A-Za-z\s/]/g, '');
+
+    // Final cleanup
+    cleaned = cleaned.trim().replace(/\s+/g, ' ');
+
+    return cleaned.toUpperCase();
+  }
+
+  // Fallback OCR strategy with multiple attempts
+  async performCollectorNumberOCRWithFallback(collectorCanvas) {
+    this.processCollectorNumberImage(collectorCanvas);
+    const strategies = [
+      {
+        name: 'optimal',
+        cropFunc: () => this.cropToCollectorNumberArea(collectorCanvas),
+        //processFunc: (canvas) => { this.processCollectorNumberImage(canvas); return canvas; }
+      },
+      {
+        name: 'wider',
+        cropFunc: () => this.cropToCollectorNumberAreaWider(collectorCanvas),
+        //processFunc: (canvas) => { this.processCollectorNumberImage(canvas); return canvas; }
+      },
+      {
+        name: 'offsetRight',
+        cropFunc: () => this.cropToCollectorNumberAreaOffset(collectorCanvas),
+        //processFunc: (canvas) => { this.processCollectorNumberImage(canvas); return canvas; }
+      }
+    ];
+
+    let bestResult = { text: '', score: 0, strategy: 'none' };
+
+    for (const strategy of strategies) {
+      try {
+        console.log(`Trying OCR strategy: ${strategy.name}`);
+
+        const cropCanvas = strategy.cropFunc();
+        this.collectorImages.push(cropCanvas.toDataURL());
+
+        //const processedCanvas = strategy.processFunc(cropCanvas);
+        const ocrResult = await this.performCollectorNumberOCR(cropCanvas);
+
+        // Score the result
+        const rawScore = this.scoreCollectorNumberResult(ocrResult.rawText);
+        console.log(`Score for "${ocrResult.rawText}": ${rawScore}`);
+        const cleanedScore = this.scoreCollectorNumberResult(ocrResult.cleanedText);
+        console.log(`Score for "${ocrResult.cleanedText}": ${cleanedScore}`);
+
+        let text = ocrResult.cleanedText;
+        let score = cleanedScore;
+
+        if (rawScore > cleanedScore) {
+          text = ocrResult.rawText;
+          score = rawScore;
+          console.log(`Using raw text "${ocrResult.rawText}" with score ${rawScore}`);
         }
 
-        ctx.putImageData(imageData, 0, 0);
-        console.log('Applied high contrast collector number processing with color inversion');
-    }
-
-
-    // Clean OCR text to handle common issues like duplicated characters
-    cleanOCRText(rawText) {
-        if (!rawText) return '';
-
-        let cleaned = rawText.trim().replace(/\s+/g, ' '); // Normalize whitespace
-
-        // Handle duplicated rarity letters (Cc -> C, Uu -> U, etc.)
-        cleaned = cleaned.replace(/^([CUMNR])\1+/i, '$1'); // Remove duplicates at start
-        cleaned = cleaned.replace(/([CUMNR])\1+/gi, '$1');  // Remove duplicates anywhere
-
-        // Handle duplicated digits (00100 -> 0100, but keep legitimate leading zeros)
-        // Only remove duplicates that create obviously wrong patterns
-        cleaned = cleaned.replace(/(\d)\1{3,}/g, '$1'); // Remove 4+ repeated digits
-
-        // Clean up common OCR mistakes
-        cleaned = cleaned.replace(/[|\\]/g, '1');     // Pipes and backslashes -> 1
-        cleaned = cleaned.replace(/[O]/g, '0');        // Letter O -> number 0
-        cleaned = cleaned.replace(/[Il]/g, '1');       // I, l -> 1
-        cleaned = cleaned.replace(/[S]/g, '5');        // S -> 5 (sometimes)
-
-        // Remove non-alphanumeric except spaces
-        cleaned = cleaned.replace(/[^0-9A-Za-z\s]/g, '');
-
-        // Final cleanup
-        cleaned = cleaned.trim().replace(/\s+/g, ' ');
-
-        return cleaned.toUpperCase();
-    }
-
-    // Fallback OCR strategy with multiple attempts
-    async performCollectorNumberOCRWithFallback(collectorCanvas) {
-        this.processCollectorNumberImage(collectorCanvas);
-        const strategies = [
-            {
-                name: 'optimal',
-                cropFunc: () => this.cropToCollectorNumberArea(collectorCanvas),
-                //processFunc: (canvas) => { this.processCollectorNumberImage(canvas); return canvas; }
-            },
-            {
-                name: 'wider',
-                cropFunc: () => this.cropToCollectorNumberAreaWider(collectorCanvas),
-                //processFunc: (canvas) => { this.processCollectorNumberImage(canvas); return canvas; }
-            },
-            {
-                name: 'offsetRight',
-                cropFunc: () => this.cropToCollectorNumberAreaOffset(collectorCanvas),
-                //processFunc: (canvas) => { this.processCollectorNumberImage(canvas); return canvas; }
-            }
-        ];
-
-        let bestResult = { text: '', score: 0, strategy: 'none' };
-
-        for (const strategy of strategies) {
-            try {
-                console.log(`Trying OCR strategy: ${strategy.name}`);
-
-                const cropCanvas = strategy.cropFunc();
-                //const processedCanvas = strategy.processFunc(cropCanvas);
-                const ocrResult = await this.performCollectorNumberOCR(cropCanvas);
-
-                // Score the result
-                const score = this.scoreCollectorNumberResult(ocrResult);
-
-                if (score > bestResult.score) {
-                    bestResult = {
-                        text: ocrResult,
-                        score: score,
-                        strategy: strategy.name
-                    };
-                }
-
-                // If we got a high-confidence result, use it immediately
-                if (score >= 80) {
-                    console.log(`High confidence result from ${strategy.name}: "${ocrResult}"`);
-                    break;
-                }
-
-            } catch (error) {
-                console.log(`Strategy ${strategy.name} failed:`, error.message);
-            }
+        if (score > bestResult.score) {
+          bestResult = {
+            text,
+            score: score,
+            strategy: strategy.name
+          };
         }
 
-        console.log(`Best OCR result: "${bestResult.text}" from ${bestResult.strategy} (score: ${bestResult.score})`);
-        return bestResult.text;
-    }
-
-    // Alternative cropping methods for fallback
-    cropToCollectorNumberAreaWider(cardCanvas) {
-        // Slightly wider crop (20% width instead of 15%)
-        const cropHeight = Math.floor(cardCanvas.height * 0.10);
-        const cropWidth = Math.floor(cardCanvas.width * 0.20);
-        const startY = cardCanvas.height - cropHeight;
-        const startX = 0;
-
-        const canvas = document.createElement('canvas');
-        canvas.width = cropWidth;
-        canvas.height = cropHeight;
-
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(cardCanvas, startX, startY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
-        return canvas;
-    }
-
-    cropToCollectorNumberAreaOffset(cardCanvas) {
-        // Offset right by 5% in case collector number isn't at exact edge
-        const cropHeight = Math.floor(cardCanvas.height * 0.10);
-        const cropWidth = Math.floor(cardCanvas.width * 0.15);
-        const startY = cardCanvas.height - cropHeight;
-        const startX = Math.floor(cardCanvas.width * 0.05); // 5% offset
-
-        const canvas = document.createElement('canvas');
-        canvas.width = cropWidth;
-        canvas.height = cropHeight;
-
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(cardCanvas, startX, startY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
-        return canvas;
-    }
-
-    // Score OCR results to pick the best one
-    scoreCollectorNumberResult(text) {
-        if (!text) return 0;
-
-        let score = 0;
-
-        // Check for collector number patterns
-        if (/^[A-Z]{3,4}\s+[CUMNRTL]\s+\d{3,4}$/.test(text)) {
-            score = 100; // Perfect format: "FDN U 0125"
-        } else if (/^[CUMNRTL]\s+\d{3,4}$/.test(text)) {
-            score = 90;  // Good format: "U 0125"
-        } else if (/^\d{3,4}$/.test(text)) {
-            score = 80;  // Just number: "0125"
-        } else if (/^[A-Z]{3,4}\s+\d{3,4}$/.test(text)) {
-            score = 70;  // Set + number: "FDN 0125"
-        } else if (/\d{3,4}/.test(text)) {
-            score = 50;  // Contains 3-4 digits
-        } else if (/[CUMNRTL]/.test(text) && /\d/.test(text)) {
-            score = 40;  // Has rarity and some digits
-        } else if (/\d{2}/.test(text)) {
-            score = 30;  // At least 2 digits
-        } else if (/\d/.test(text)) {
-            score = 20;  // At least 1 digit
-        } else if (/[CUMNRTL]/.test(text)) {
-            score = 10;  // At least has rarity
+        // If we got a high-confidence result, use it immediately
+        if (score >= 80) {
+          console.log(`High confidence result from ${strategy.name}: "${text}"`);
+          break;
         }
 
-        return score;
+      } catch (error) {
+        console.log(`Strategy ${strategy.name} failed:`, error.message);
+      }
     }
 
-    async performCollectorNumberOCR(canvas) {
-        // Load Tesseract.js if not already loaded
-        if (!window.Tesseract) {
-            await this.loadTesseract();
-        }
+    console.log(`Best OCR result: "${bestResult.text}" from ${bestResult.strategy} (score: ${bestResult.score})`);
+    return bestResult.text;
+  }
 
-        // OPTIMAL OCR configuration for collector numbers (found via systematic testing)
-        const ocrConfig = {
-            logger: m => {
-                if (m.status === 'recognizing text') {
-                    const progress = 80 + (m.progress * 10);
-                    this.updateStatus(`Sammlernummer wird erkannt... ${Math.round(m.progress * 100)}%`, progress);
-                }
-            },
-            tessedit_pageseg_mode: '13', // Raw line - treats image as single text line, bypassing hacks
-            tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz ' // Alphanumeric only
-        };
+  // Alternative cropping methods for fallback
+  cropToCollectorNumberAreaWider(cardCanvas) {
+    // Slightly wider crop (20% width instead of 15%)
+    const cropHeight = Math.floor(cardCanvas.height * 0.10);
+    const cropWidth = Math.floor(cardCanvas.width * 0.20);
+    const startY = cardCanvas.height - cropHeight;
+    const startX = 0;
 
-        try {
-            const result = await Tesseract.recognize(canvas, 'eng', ocrConfig); // Always use English for collector numbers
-            const rawText = result.data.text || '';
-            const cleanedText = this.cleanOCRText(rawText);
+    const canvas = document.createElement('canvas');
+    canvas.width = cropWidth;
+    canvas.height = cropHeight;
 
-            console.log('Raw OCR result:', `"${rawText}"`);
-            console.log('Cleaned OCR result:', `"${cleanedText}"`);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(cardCanvas, startX, startY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+    return canvas;
+  }
 
-            return cleanedText;
+  cropToCollectorNumberAreaOffset(cardCanvas) {
+    // Offset right by 5% in case collector number isn't at exact edge
+    const cropHeight = Math.floor(cardCanvas.height * 0.10);
+    const cropWidth = Math.floor(cardCanvas.width * 0.15);
+    const startY = cardCanvas.height - cropHeight;
+    const startX = Math.floor(cardCanvas.width * 0.05); // 5% offset
 
-        } catch (error) {
-            console.error('Collector number OCR Error:', error);
-            throw error;
-        }
+    const canvas = document.createElement('canvas');
+    canvas.width = cropWidth;
+    canvas.height = cropHeight;
+
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(cardCanvas, startX, startY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+    return canvas;
+  }
+
+  // Score OCR results to pick the best one
+  scoreCollectorNumberResult(text) {
+    if (!text) return 0;
+
+    let score = 0;
+
+    const hasCollectionCode = this.collectionRegex.test(text);
+    const hasRarityCode = /\s[CURMBLST]\s/.test(text);
+    const hasCardNumber = /\d{3,5}/.test(text);
+
+    if (hasCollectionCode) {
+      score += 50;
     }
 
+    if (hasRarityCode) {
+      score += 15;
+    }
 
-    async loadTesseract() {
-        return new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = 'https://unpkg.com/tesseract.js@v4.1.1/dist/tesseract.min.js';
-            script.onload = resolve;
-            script.onerror = reject;
-            document.head.appendChild(script);
+    if (hasCardNumber) {
+      score += 30;
+    }
+
+    if (text.length > 10) {
+      score += 5;
+    }
+
+    console.log(`Score for "${text}": ${score}`);
+
+    return score;
+  }
+
+  async performCollectorNumberOCR(canvas) {
+    // Load Tesseract.js if not already loaded
+    if (!window.Tesseract) {
+      await this.loadTesseract();
+    }
+
+    // OPTIMAL OCR configuration for collector numbers (found via systematic testing)
+    const ocrConfig = {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          const progress = 80 + (m.progress * 10);
+          this.updateStatus(`Sammlernummer wird erkannt... ${Math.round(m.progress * 100)}%`, progress);
+        }
+      },
+      //psm: '13',
+      //oem: '3',  // Default
+      tessedit_pageseg_mode: '13', // Raw line - treats image as single text line, bypassing hacks
+      tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz /' // Alphanumeric only
+    };
+
+    try {
+      const result = await Tesseract.recognize(canvas, 'eng', ocrConfig); // Always use English for collector numbers
+      const rawText = result.data.text || '';
+      const cleanedText = this.cleanOCRText(rawText);
+
+      console.log('Raw OCR result:', `"${rawText}"`);
+      console.log('Cleaned OCR result:', `"${cleanedText}"`);
+
+      return { cleanedText, rawText };
+
+    } catch (error) {
+      console.error('Collector number OCR Error:', error);
+      throw error;
+    }
+  }
+
+
+  async loadTesseract() {
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'https://unpkg.com/tesseract.js@v4.1.1/dist/tesseract.min.js';
+      script.onload = resolve;
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
+  }
+
+  async searchCardByCollectorNumber(collectorInfo) {
+    try {
+      // Parse collector number info (e.g., "FDN U 0125" or "U 0125")
+      const parsed = this.parseCollectorNumber(collectorInfo);
+      if (!parsed) {
+        console.error('Could not parse collector number:', collectorInfo);
+        return null;
+      }
+
+      const { setCode, collectorNumber } = parsed;
+      console.log('Parsed collector info:', setCode, collectorNumber);
+
+      // Use exact Scryfall lookup by set and collector number
+      const response = await fetch(`https://api.scryfall.com/cards/${setCode.toLowerCase()}/${parseInt(collectorNumber, 10)}`,
+        {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json'
+          }
         });
+
+      if (response.ok) {
+        const card = await response.json();
+        return {
+          name: card.name,
+          set: card.set_name,
+          image: card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal,
+          id: card.id,
+          collectorNumber: card.collector_number,
+          setCode: card.set.toUpperCase()
+        };
+      } else if (response.status === 404) {
+        console.log('Card not found with exact lookup, trying fallback search');
+        // Fallback to fuzzy search if exact lookup fails
+        return await this.searchCardFallback(collectorInfo);
+      }
+    } catch (error) {
+      console.error('Card search error:', error);
     }
 
-    async searchCardByCollectorNumber(collectorInfo) {
-        try {
-            // Parse collector number info (e.g., "FDN U 0125" or "U 0125")
-            const parsed = this.parseCollectorNumber(collectorInfo);
-            if (!parsed) {
-                console.error('Could not parse collector number:', collectorInfo);
-                return null;
-            }
+    return null;
+  }
 
-            const { setCode, collectorNumber } = parsed;
+  parseCollectorNumber(collectorInfo) {
+    // Clean the input
+    const cleaned = collectorInfo.trim().toUpperCase();
+    console.log('Parsing collector info:', cleaned);
 
-            // Use exact Scryfall lookup by set and collector number
-            const response = await fetch(`https://api.scryfall.com/cards/${setCode.toLowerCase()}/${collectorNumber}`);
+    /* old version that only worked for a specific set
+    const identificationRegex = /(?<cardCode>[CURMBLST])\s*(?<collectionNumber>\d{2,4})\s*(?<collectionCode>[A-Z0-4]{2,4})/
 
-            if (response.ok) {
-                const card = await response.json();
-                return {
-                    name: card.name,
-                    set: card.set_name,
-                    image: card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal,
-                    id: card.id,
-                    collectorNumber: card.collector_number,
-                    setCode: card.set.toUpperCase()
-                };
-            } else if (response.status === 404) {
-                console.log('Card not found with exact lookup, trying fallback search');
-                // Fallback to fuzzy search if exact lookup fails
-                return await this.searchCardFallback(collectorInfo);
-            }
-        } catch (error) {
-            console.error('Card search error:', error);
-        }
+    const match = cleaned.match(identificationRegex);
+    if (match) {
+      const { cardCode, collectionNumber, collectionCode } = match.groups;
+      console.log('Matched collector info:', cardCode, collectionNumber, collectionCode);
 
-        return null;
+      const setCode = collectionCode;
+      const collectorNumber = collectionNumber;
+      return { setCode, collectorNumber };
+    }
+    */
+
+    const cardInfo = {
+      collectorNumber: null,
+      setCode: null
     }
 
-    parseCollectorNumber(collectorInfo) {
-        // Clean the input
-        const cleaned = collectorInfo.trim().toUpperCase();
-        console.log('Parsing collector info:', cleaned);
-
-        // Try different patterns for collector numbers
-        const patterns = [
-            // Pattern: "FDN U 0125" (set code + rarity + number)
-            /^([A-Z0-9]{3,4})\s+[CUMNRTL]\s+(\d{1,4}[A-Z]?)$/,
-            // Pattern: "U 0125" (rarity + number, no set)
-            /^[CUMNRTL]\s+(\d{1,4}[A-Z]?)$/,
-            // Pattern: "0125" (just number)
-            /^(\d{1,4}[A-Z]?)$/,
-            // Pattern: "FDN 125" (set + number)
-            /^([A-Z0-9]{3,4})\s+(\d{1,4}[A-Z]?)$/
-        ];
-
-        for (const pattern of patterns) {
-            const match = cleaned.match(pattern);
-            if (match) {
-                if (pattern.source.includes('([A-Z0-9]{3,4})')) {
-                    // Has set code
-                    return {
-                        setCode: match[1],
-                        collectorNumber: match[2] || match[1]
-                    };
-                } else {
-                    // No set code, try to guess from recent sets
-                    const guessedSet = this.guessRecentSet();
-                    return {
-                        setCode: guessedSet,
-                        collectorNumber: match[1]
-                    };
-                }
-            }
-        }
-
-        return null;
+    const collectionMatch = this.collectionRegex.exec(cleaned);
+    if (collectionMatch) {
+      const { collection } = collectionMatch.groups;
+      cardInfo.setCode = collection;
     }
 
-    guessRecentSet() {
-        // Common recent set codes - this could be made configurable
-        const recentSets = ['FDN', 'DSK', 'BLB', 'OTJ', 'MKM', 'LCI', 'WOE'];
-        return recentSets[0]; // Default to most recent
+    const numberMatch = /\s*(?<number>\d{3,5})\s*/.exec(cleaned);
+    if (numberMatch) {
+      const { number } = numberMatch.groups;
+      cardInfo.collectorNumber = number;
     }
 
-    async searchCardFallback(collectorInfo) {
-        // If exact lookup fails, we could try other approaches
-        console.log('Attempting fallback search for:', collectorInfo);
-        return null; // For now, just return null
+    if (cardInfo.collectorNumber && cardInfo.setCode) {
+      console.log('Parsed collector info:', cardInfo.setCode, cardInfo.collectorNumber);
+      return cardInfo;
     }
 
+    console.log('Failed to parse collector info:', cleaned);
+    console.log('Matched:', collectionMatch, numberMatch);
+    return null;
+  }
 
-    showProcessing(show) {
-        this.processingSection.style.display = show ? 'block' : 'none';
-        //this.resultsSection.style.display = 'none';
+  guessRecentSet() {
+    // Common recent set codes - this could be made configurable
+    const recentSets = ['FDN', 'DSK', 'BLB', 'OTJ', 'MKM', 'LCI', 'WOE'];
+    return recentSets[0]; // Default to most recent
+  }
 
-        if (show) {
-            this.progressBar.style.width = '0%';
-        }
+  async searchCardFallback(collectorInfo) {
+    // If exact lookup fails, we could try other approaches
+    console.log('Attempting fallback search for:', collectorInfo);
+    return null; // For now, just return null
+  }
+
+
+  showProcessing(show) {
+    this.processingSection.style.display = show ? 'block' : 'none';
+    //this.resultsSection.style.display = 'none';
+
+    if (show) {
+      this.progressBar.style.width = '0%';
+    }
+  }
+
+  updateStatus(text, progress = 0) {
+    this.statusText.textContent = text;
+    this.progressBar.style.width = `${progress}%`;
+  }
+
+  showResults(cardData, cardImage, recognizedText = '') {
+    this.processingSection.style.display = 'none';
+    this.resultsSection.style.display = 'block';
+
+    this.resultImage.src = cardData.image;
+    this.resultName.textContent = cardData.name;
+    this.resultSet.textContent = cardData.set;
+
+    // Show recognized text for debugging
+    const resultDetails = document.getElementById('resultDetails');
+    if (resultDetails && recognizedText) {
+      resultDetails.textContent = `Erkannter Text: "${recognizedText}"`;
     }
 
-    updateStatus(text, progress = 0) {
-        this.statusText.textContent = text;
-        this.progressBar.style.width = `${progress}%`;
+    this.currentCard = cardData;
+    this.currentCardImage = cardImage.toDataURL();
+  }
+
+  addCardToCollection() {
+    if (this.currentCard) {
+      const existingCard = this.cards.find(c => c.id === this.currentCard.id);
+
+      if (existingCard) {
+        existingCard.count = (existingCard.count || 1) + 1;
+      } else {
+        this.cards.push({
+          ...this.currentCard,
+          count: 1,
+          addedAt: new Date().toISOString()
+        });
+      }
+
+      this.saveCollection();
+      this.updateCardCount();
+      this.renderCollection();
+
+      alert(`"${this.currentCard.name}" wurde zur Sammlung hinzugefügt!`);
     }
+  }
 
-    showResults(cardData, cardImage, recognizedText = '') {
-        this.processingSection.style.display = 'none';
-        this.resultsSection.style.display = 'block';
-
-        this.resultImage.src = cardData.image;
-        this.resultName.textContent = cardData.name;
-        this.resultSet.textContent = cardData.set;
-
-        // Show recognized text for debugging
-        const resultDetails = document.getElementById('resultDetails');
-        if (resultDetails && recognizedText) {
-            resultDetails.textContent = `Erkannter Text: "${recognizedText}"`;
-        }
-
-        this.currentCard = cardData;
-        this.currentCardImage = cardImage.toDataURL();
-    }
-
-    addCardToCollection() {
-        if (this.currentCard) {
-            const existingCard = this.cards.find(c => c.id === this.currentCard.id);
-
-            if (existingCard) {
-                existingCard.count = (existingCard.count || 1) + 1;
-            } else {
-                this.cards.push({
-                    ...this.currentCard,
-                    count: 1,
-                    addedAt: new Date().toISOString()
-                });
-            }
-
-            this.saveCollection();
-            this.updateCardCount();
-            this.renderCollection();
-
-            alert(`"${this.currentCard.name}" wurde zur Sammlung hinzugefügt!`);
-        }
-    }
-
-    retryOcr() {
-        this.captureCard();
-    }
+  retryOcr() {
+    this.captureCard();
+  }
 
 
 
-    updateCardCount() {
-        this.cardCount.textContent = this.cards.length;
-    }
+  updateCardCount() {
+    this.cardCount.textContent = this.cards.length;
+  }
 
-    renderCollection() {
-        this.cardList.innerHTML = '';
+  renderCollection() {
+    this.cardList.innerHTML = '';
 
-        this.cards.forEach(card => {
-            const cardElement = document.createElement('div');
-            cardElement.className = 'card-item';
-            cardElement.innerHTML = `
+    this.cards.forEach(card => {
+      const cardElement = document.createElement('div');
+      cardElement.className = 'card-item';
+      cardElement.innerHTML = `
                 <img src="${card.image}" alt="${card.name}">
                 <div class="card-item-info">
                     <h5>${card.name}</h5>
@@ -594,98 +825,99 @@ class MTGScanner {
                     </div>
                 </div>
             `;
-            this.cardList.appendChild(cardElement);
-        });
+      this.cardList.appendChild(cardElement);
+    });
+  }
+
+  removeCard(cardId) {
+    this.cards = this.cards.filter(c => c.id !== cardId);
+    this.saveCollection();
+    this.updateCardCount();
+    this.renderCollection();
+  }
+
+  saveCollection() {
+    localStorage.setItem('mtg-collection', JSON.stringify(this.cards));
+  }
+
+  exportCollection() {
+    const dataStr = JSON.stringify(this.cards, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `mtg-collection-${new Date().toISOString().split('T')[0]}.json`;
+    link.click();
+
+    URL.revokeObjectURL(url);
+  }
+
+  clearCollection() {
+    if (confirm('Wirklich alle Karten löschen?')) {
+      this.cards = [];
+      this.saveCollection();
+      this.updateCardCount();
+      this.renderCollection();
     }
+  }
 
-    removeCard(cardId) {
-        this.cards = this.cards.filter(c => c.id !== cardId);
-        this.saveCollection();
-        this.updateCardCount();
-        this.renderCollection();
+  // Download methods for debugging
+  downloadImage(dataUrl, filename) {
+    const link = document.createElement('a');
+    link.href = dataUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  showCapturedImage() {
+    if (this.lastCapturedImage) {
+      this.displayDebugImage(this.lastCapturedImage, '📷 Original Image');
+    } else {
+      alert('Kein aufgenommenes Bild verfügbar');
     }
+  }
 
-    saveCollection() {
-        localStorage.setItem('mtg-collection', JSON.stringify(this.cards));
+  showCardImage() {
+    if (this.lastCardImage) {
+      this.displayDebugImage(this.lastCardImage, '🎴 Card Image');
+    } else {
+      alert('Kein Kartenbild verfügbar');
     }
+  }
 
-    exportCollection() {
-        const dataStr = JSON.stringify(this.cards, null, 2);
-        const dataBlob = new Blob([dataStr], { type: 'application/json' });
-        const url = URL.createObjectURL(dataBlob);
 
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `mtg-collection-${new Date().toISOString().split('T')[0]}.json`;
-        link.click();
-
-        URL.revokeObjectURL(url);
+  showCollectorImage() {
+    if (this.collectorImages.length > 0) {
+      const lastCollectorImage = this.collectorImages[this.collectorImages.length - 1];
+      this.displayDebugImage(lastCollectorImage, '🔢 Collector Number Area');
+    } else {
+      alert('Kein Sammlernummernbild verfügbar');
     }
+  }
 
-    clearCollection() {
-        if (confirm('Wirklich alle Karten löschen?')) {
-            this.cards = [];
-            this.saveCollection();
-            this.updateCardCount();
-            this.renderCollection();
-        }
-    }
+  displayDebugImage(imageDataUrl, title) {
+    const debugDisplay = document.getElementById('debugImageDisplay');
+    const debugImage = document.getElementById('debugImage');
+    const debugTitle = document.getElementById('debugImageTitle');
 
-    // Download methods for debugging
-    downloadImage(dataUrl, filename) {
-        const link = document.createElement('a');
-        link.href = dataUrl;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    }
+    debugTitle.textContent = title;
+    debugImage.src = imageDataUrl;
+    debugDisplay.hidden = false;
 
-    showCapturedImage() {
-        if (this.lastCapturedImage) {
-            this.displayDebugImage(this.lastCapturedImage, '📷 Original Image');
-        } else {
-            alert('Kein aufgenommenes Bild verfügbar');
-        }
-    }
+    // Scroll to the debug image
+    debugDisplay.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
 
-    showCardImage() {
-        if (this.lastCardImage) {
-            this.displayDebugImage(this.lastCardImage, '🎴 Card Image');
-        } else {
-            alert('Kein Kartenbild verfügbar');
-        }
-    }
-
-
-    showCollectorImage() {
-        if (this.lastCollectorImage) {
-            this.displayDebugImage(this.lastCollectorImage, '🔢 Collector Number Area');
-        } else {
-            alert('Kein Sammlernummernbild verfügbar');
-        }
-    }
-
-    displayDebugImage(imageDataUrl, title) {
-        const debugDisplay = document.getElementById('debugImageDisplay');
-        const debugImage = document.getElementById('debugImage');
-        const debugTitle = document.getElementById('debugImageTitle');
-
-        debugTitle.textContent = title;
-        debugImage.src = imageDataUrl;
-        debugDisplay.hidden = false;
-
-        // Scroll to the debug image
-        debugDisplay.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-
-    hideDebugImage() {
-        const debugDisplay = document.getElementById('debugImageDisplay');
-        debugDisplay.hidden = true;
-    }
+  hideDebugImage() {
+    const debugDisplay = document.getElementById('debugImageDisplay');
+    debugDisplay.hidden = true;
+  }
 }
 
 // Initialize the app
 document.addEventListener('DOMContentLoaded', () => {
-    window.mtgScanner = new MTGScanner();
+  window.mtgScanner = new MTGScanner();
 });
