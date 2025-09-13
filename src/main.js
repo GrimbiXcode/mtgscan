@@ -45,6 +45,17 @@ class MTGScanner {
 
     // Notification system
     this.notificationContainer = document.getElementById('notificationContainer');
+
+    // Modal elements
+    this.cardModal = document.getElementById('cardModal');
+    this.modalCardName = document.getElementById('modalCardName');
+    this.modalCardImage = document.getElementById('modalCardImage');
+    this.modalCardSet = document.getElementById('modalCardSet');
+    this.currentQuantity = document.getElementById('currentQuantity');
+    this.increaseQuantityBtn = document.getElementById('increaseQuantity');
+    this.decreaseQuantityBtn = document.getElementById('decreaseQuantity');
+    this.modalCloseBtn = document.getElementById('modalCloseBtn');
+    this.backToScannerBtn = document.getElementById('backToScannerBtn');
   }
 
   initEventListeners() {
@@ -62,6 +73,19 @@ class MTGScanner {
 
     // Frame size control
     this.frameSizeSlider.addEventListener('input', (e) => this.updateFrameSize(parseFloat(e.target.value)));
+
+    // Modal event listeners
+    this.increaseQuantityBtn.addEventListener('click', () => this.increaseCardQuantity());
+    this.decreaseQuantityBtn.addEventListener('click', () => this.decreaseCardQuantity());
+    this.modalCloseBtn.addEventListener('click', () => this.hideCardModal());
+    this.backToScannerBtn.addEventListener('click', () => this.hideCardModal());
+    
+    // Close modal when clicking overlay
+    this.cardModal.addEventListener('click', (e) => {
+      if (e.target === this.cardModal) {
+        this.hideCardModal();
+      }
+    });
   }
 
   initFrameSize() {
@@ -839,46 +863,118 @@ class MTGScanner {
   }
 
   async showResults(cardData, cardImage, recognizedText = '') {
+    // Hide processing section
     this.processingSection.style.display = 'none';
-    this.resultsSection.style.display = 'block';
+    
+    // Store current card data
+    this.currentCard = cardData;
+    this.currentCardImage = cardImage.toDataURL();
+    
+    // Show the card modal instead of inline results
+    await this.showCardModal(cardData, recognizedText);
+  }
 
-    // Show loading state for result image
-    this.resultImage.classList.add('loading');
-    this.resultImage.src = 'data:image/svg+xml;base64,' + btoa(
-      '<svg width="200" height="280" xmlns="http://www.w3.org/2000/svg">' +
-      '<rect width="200" height="280" fill="#f0f0f0" stroke="#ccc" stroke-width="2"/>' +
-      '<text x="100" y="140" text-anchor="middle" fill="#666" font-family="Arial" font-size="14">Loading image...</text>' +
+  // Modal Management Methods
+  async showCardModal(cardData, recognizedText = '') {
+    // Set modal content
+    this.modalCardName.textContent = cardData.name;
+    this.modalCardSet.textContent = cardData.set;
+    
+    // Show loading state for modal image
+    this.modalCardImage.classList.add('loading');
+    this.modalCardImage.src = 'data:image/svg+xml;base64,' + btoa(
+      '<svg width="150" height="210" xmlns="http://www.w3.org/2000/svg">' +
+      '<rect width="150" height="210" fill="#f0f0f0" stroke="#ccc" stroke-width="2"/>' +
+      '<text x="75" y="105" text-anchor="middle" fill="#666" font-family="Arial" font-size="12">Loading...</text>' +
       '</svg>'
     );
 
-    // Fetch and display the card image to bypass CORS
+    // Load and display the card image
     try {
       const imageUrl = await this.fetchCardImage(cardData.image);
-      this.resultImage.src = imageUrl;
-      this.resultImage.classList.remove('loading');
+      this.modalCardImage.src = imageUrl;
+      this.modalCardImage.classList.remove('loading');
     } catch (error) {
-      console.error('Error fetching card image:', error);
-      // Show a placeholder or default image
-      this.resultImage.src = 'data:image/svg+xml;base64,' + btoa(
-        '<svg width="200" height="280" xmlns="http://www.w3.org/2000/svg">' +
-        '<rect width="200" height="280" fill="#f0f0f0" stroke="#ccc" stroke-width="2"/>' +
-        '<text x="100" y="140" text-anchor="middle" fill="#666" font-family="Arial" font-size="16">Image not available</text>' +
+      console.error('Error fetching card image for modal:', error);
+      this.modalCardImage.src = 'data:image/svg+xml;base64,' + btoa(
+        '<svg width="150" height="210" xmlns="http://www.w3.org/2000/svg">' +
+        '<rect width="150" height="210" fill="#f0f0f0" stroke="#ccc" stroke-width="2"/>' +
+        '<text x="75" y="105" text-anchor="middle" fill="#666" font-family="Arial" font-size="10">No image</text>' +
         '</svg>'
       );
-      this.resultImage.classList.remove('loading');
+      this.modalCardImage.classList.remove('loading');
     }
 
-    this.resultName.textContent = cardData.name;
-    this.resultSet.textContent = cardData.set;
+    // Update quantity display
+    this.updateModalQuantityDisplay(cardData);
+    
+    // Show the modal
+    this.cardModal.removeAttribute('hidden');
+    
+    // Focus management for accessibility
+    setTimeout(() => {
+      this.modalCloseBtn.focus();
+    }, 100);
+  }
 
-    // Show recognized text for debugging
-    const resultDetails = document.getElementById('resultDetails');
-    if (resultDetails && recognizedText) {
-      resultDetails.textContent = `Erkannter Text: "${recognizedText}"`;
+  hideCardModal() {
+    this.cardModal.setAttribute('hidden', '');
+  }
+
+  updateModalQuantityDisplay(cardData) {
+    const quantity = this.getCardQuantity(cardData.id);
+    this.currentQuantity.textContent = quantity;
+    
+    // Enable/disable decrease button based on quantity
+    this.decreaseQuantityBtn.disabled = quantity === 0;
+  }
+
+  getCardQuantity(cardId) {
+    const existingCard = this.cards.find(c => c.id === cardId);
+    return existingCard ? (existingCard.count || 1) : 0;
+  }
+
+  increaseCardQuantity() {
+    if (!this.currentCard) return;
+    
+    const existingCard = this.cards.find(c => c.id === this.currentCard.id);
+    
+    if (existingCard) {
+      existingCard.count = (existingCard.count || 1) + 1;
+      this.showSuccess(`Added another copy. You now have ${existingCard.count} copies of "${this.currentCard.name}".`);
+    } else {
+      this.cards.push({
+        ...this.currentCard,
+        count: 1,
+        addedAt: new Date().toISOString()
+      });
+      this.showSuccess(`"${this.currentCard.name}" wurde zur Sammlung hinzugefügt!`);
     }
+    
+    this.saveCollection();
+    this.updateCardCount();
+    this.renderCollection();
+    this.updateModalQuantityDisplay(this.currentCard);
+  }
 
-    this.currentCard = cardData;
-    this.currentCardImage = cardImage.toDataURL();
+  decreaseCardQuantity() {
+    if (!this.currentCard) return;
+    
+    const existingCard = this.cards.find(c => c.id === this.currentCard.id);
+    
+    if (!existingCard || existingCard.count <= 1) {
+      // Remove the card entirely
+      this.cards = this.cards.filter(c => c.id !== this.currentCard.id);
+      this.showWarning(`"${this.currentCard.name}" wurde aus der Sammlung entfernt.`);
+    } else {
+      existingCard.count -= 1;
+      this.showInfo(`Reduced quantity. You now have ${existingCard.count} copies of "${this.currentCard.name}".`);
+    }
+    
+    this.saveCollection();
+    this.updateCardCount();
+    this.renderCollection();
+    this.updateModalQuantityDisplay(this.currentCard);
   }
 
   addCardToCollection() {
@@ -910,7 +1006,12 @@ class MTGScanner {
 
 
   updateCardCount() {
-    this.cardCount.textContent = this.cards.length;
+    // Calculate total cards including quantities
+    const totalCards = this.cards.reduce((sum, card) => sum + (card.count || 1), 0);
+    const uniqueCards = this.cards.length;
+    
+    // Display both unique cards and total quantity
+    this.cardCount.textContent = `${uniqueCards} (${totalCards} total)`;
   }
 
   async renderCollection() {
