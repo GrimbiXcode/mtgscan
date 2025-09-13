@@ -399,6 +399,50 @@ header h1 {
     background: white;
 }
 
+/* Image loading states */
+.card-item img[data-loading="true"] {
+    background: #f0f0f0;
+    position: relative;
+    min-height: 140px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.card-item img[data-loading="true"]:after {
+    content: "Loading...";
+    position: absolute;
+    color: #666;
+    font-size: 0.8rem;
+    text-align: center;
+}
+
+#resultImage {
+    transition: opacity 0.3s ease;
+}
+
+#resultImage[data-loading="true"] {
+    opacity: 0.5;
+    background: #f0f0f0;
+}
+
+/* Loading animation for result image */
+#resultImage.loading {
+    opacity: 0.5;
+    background: linear-gradient(90deg, #f0f0f0 25%, transparent 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: loading-shimmer 1.5s infinite;
+}
+
+@keyframes loading-shimmer {
+    0% {
+        background-position: -200% 0;
+    }
+    100% {
+        background-position: 200% 0;
+    }
+}
+
 .btn.small {
     padding: 0.3rem 0.6rem;
     font-size: 0.8rem;

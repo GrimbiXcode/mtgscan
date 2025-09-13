@@ -758,11 +758,36 @@ class MTGScanner {
     this.progressBar.style.width = `${progress}%`;
   }
 
-  showResults(cardData, cardImage, recognizedText = '') {
+  async showResults(cardData, cardImage, recognizedText = '') {
     this.processingSection.style.display = 'none';
     this.resultsSection.style.display = 'block';
 
-    this.resultImage.src = cardData.image;
+    // Show loading state for result image
+    this.resultImage.classList.add('loading');
+    this.resultImage.src = 'data:image/svg+xml;base64,' + btoa(
+      '<svg width="200" height="280" xmlns="http://www.w3.org/2000/svg">' +
+      '<rect width="200" height="280" fill="#f0f0f0" stroke="#ccc" stroke-width="2"/>' +
+      '<text x="100" y="140" text-anchor="middle" fill="#666" font-family="Arial" font-size="14">Loading image...</text>' +
+      '</svg>'
+    );
+
+    // Fetch and display the card image to bypass CORS
+    try {
+      const imageUrl = await this.fetchCardImage(cardData.image);
+      this.resultImage.src = imageUrl;
+      this.resultImage.classList.remove('loading');
+    } catch (error) {
+      console.error('Error fetching card image:', error);
+      // Show a placeholder or default image
+      this.resultImage.src = 'data:image/svg+xml;base64,' + btoa(
+        '<svg width="200" height="280" xmlns="http://www.w3.org/2000/svg">' +
+        '<rect width="200" height="280" fill="#f0f0f0" stroke="#ccc" stroke-width="2"/>' +
+        '<text x="100" y="140" text-anchor="middle" fill="#666" font-family="Arial" font-size="16">Image not available</text>' +
+        '</svg>'
+      );
+      this.resultImage.classList.remove('loading');
+    }
+    
     this.resultName.textContent = cardData.name;
     this.resultSet.textContent = cardData.set;
 
@@ -808,14 +833,16 @@ class MTGScanner {
     this.cardCount.textContent = this.cards.length;
   }
 
-  renderCollection() {
+  async renderCollection() {
     this.cardList.innerHTML = '';
 
-    this.cards.forEach(card => {
+    for (const card of this.cards) {
       const cardElement = document.createElement('div');
       cardElement.className = 'card-item';
+      
+      // Create the card element structure
       cardElement.innerHTML = `
-                <img src="${card.image}" alt="${card.name}">
+                <img alt="${card.name}" data-loading="true">
                 <div class="card-item-info">
                     <h5>${card.name}</h5>
                     <p>${card.set}</p>
@@ -825,8 +852,28 @@ class MTGScanner {
                     </div>
                 </div>
             `;
+      
+      const imgElement = cardElement.querySelector('img');
+      
+      // Fetch and set the image asynchronously
+      try {
+        const imageUrl = await this.fetchCardImage(card.image);
+        imgElement.src = imageUrl;
+        imgElement.removeAttribute('data-loading');
+      } catch (error) {
+        console.error(`Error fetching image for ${card.name}:`, error);
+        // Show placeholder image
+        imgElement.src = 'data:image/svg+xml;base64,' + btoa(
+          '<svg width="100" height="140" xmlns="http://www.w3.org/2000/svg">' +
+          '<rect width="100" height="140" fill="#f0f0f0" stroke="#ccc" stroke-width="1"/>' +
+          '<text x="50" y="70" text-anchor="middle" fill="#666" font-family="Arial" font-size="10">No image</text>' +
+          '</svg>'
+        );
+        imgElement.removeAttribute('data-loading');
+      }
+      
       this.cardList.appendChild(cardElement);
-    });
+    }
   }
 
   removeCard(cardId) {
@@ -841,13 +888,34 @@ class MTGScanner {
   }
 
   exportCollection() {
-    const dataStr = JSON.stringify(this.cards, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    // Generate Moxfield-compatible CSV format
+    const csvHeaders = ['Count', 'Name', 'Edition', 'Condition', 'Language', 'Foil', 'Collector Number'];
+    const csvRows = [csvHeaders];
+
+    // Add each card to CSV
+    for (const card of this.cards) {
+      const row = [
+        card.count || 1,                    // Count
+        `"${card.name}"`,                   // Name (quoted to handle commas)
+        `"${card.set || ''}"`,              // Edition (set name)
+        'Near Mint',                        // Condition (default)
+        'English',                          // Language (default)
+        'No',                              // Foil (default)
+        card.collectorNumber || ''          // Collector Number
+      ];
+      csvRows.push(row);
+    }
+
+    // Convert to CSV string
+    const csvContent = csvRows.map(row => row.join(',')).join('\n');
+
+    // Create and download CSV file
+    const dataBlob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(dataBlob);
 
     const link = document.createElement('a');
     link.href = url;
-    link.download = `mtg-collection-${new Date().toISOString().split('T')[0]}.json`;
+    link.download = `mtg-collection-${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
 
     URL.revokeObjectURL(url);
@@ -914,6 +982,101 @@ class MTGScanner {
   hideDebugImage() {
     const debugDisplay = document.getElementById('debugImageDisplay');
     debugDisplay.hidden = true;
+  }
+
+  // Fetch card image to bypass CORS restrictions
+  async fetchCardImage(imageUrl) {
+    if (!imageUrl) {
+      throw new Error('No image URL provided');
+    }
+
+    // Check if we already have this image cached
+    const cacheKey = `card-image-${btoa(imageUrl)}`;
+    const cachedImage = localStorage.getItem(cacheKey);
+    const cachedTimestamp = localStorage.getItem(`${cacheKey}-timestamp`);
+    
+    // Use cached image if it exists and is less than 24 hours old
+    if (cachedImage && cachedTimestamp) {
+      const ageInHours = (Date.now() - parseInt(cachedTimestamp)) / (1000 * 60 * 60);
+      if (ageInHours < 24) {
+        console.log('Using cached image for:', imageUrl);
+        return cachedImage;
+      }
+    }
+
+    try {
+      console.log('Fetching image:', imageUrl);
+      
+      // Fetch the image
+      const response = await fetch(imageUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'image/*'
+        },
+        mode: 'cors'
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      // Convert to blob
+      const blob = await response.blob();
+      
+      // Convert blob to data URL
+      const dataUrl = await this.blobToDataUrl(blob);
+      
+      // Cache the result (but limit cache size to prevent storage issues)
+      try {
+        localStorage.setItem(cacheKey, dataUrl);
+        localStorage.setItem(`${cacheKey}-timestamp`, Date.now().toString());
+        console.log('Cached image for:', imageUrl);
+      } catch (cacheError) {
+        console.warn('Could not cache image (storage full?):', cacheError);
+        // Clear old cached images if storage is full
+        this.clearOldImageCache();
+      }
+      
+      return dataUrl;
+      
+    } catch (error) {
+      console.error('Error fetching image:', error);
+      throw error;
+    }
+  }
+
+  // Convert blob to data URL
+  blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  // Clear old cached images to free up storage space
+  clearOldImageCache() {
+    const keys = Object.keys(localStorage);
+    const imageKeys = keys.filter(key => key.startsWith('card-image-'));
+    const timestampKeys = keys.filter(key => key.includes('-timestamp'));
+    
+    // Sort by timestamp and remove oldest entries
+    const entries = timestampKeys
+      .map(key => ({
+        key: key.replace('-timestamp', ''),
+        timestamp: parseInt(localStorage.getItem(key) || '0')
+      }))
+      .sort((a, b) => a.timestamp - b.timestamp);
+    
+    // Remove oldest 25% of cached images
+    const toRemove = Math.ceil(entries.length * 0.25);
+    for (let i = 0; i < toRemove; i++) {
+      const entry = entries[i];
+      localStorage.removeItem(entry.key);
+      localStorage.removeItem(`${entry.key}-timestamp`);
+      console.log('Removed old cached image:', entry.key);
+    }
   }
 }
 
