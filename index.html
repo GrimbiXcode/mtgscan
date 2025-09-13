@@ -31,6 +31,17 @@
                     <canvas id="canvas" hidden></canvas>
                 </div>
 
+                <div class="frame-size-controls">
+                    <label for="frameSizeSlider" class="frame-size-label">
+                        📏 Rahmen-Größe: <span id="frameSizeValue">Medium</span>
+                    </label>
+                    <div class="frame-size-slider-container">
+                        <span class="size-label">Klein</span>
+                        <input type="range" id="frameSizeSlider" min="0.5" max="2" step="0.1" value="1" class="frame-size-slider">
+                        <span class="size-label">Groß</span>
+                    </div>
+                </div>
+
                 <div class="camera-controls">
                     <button id="startCamera" class="btn primary">📷 Kamera starten</button>
                     <button id="captureCard" class="btn" disabled>📸 Karte scannen</button>
