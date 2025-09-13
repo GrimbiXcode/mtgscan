@@ -106,6 +106,35 @@
         </main>
     </div>
 
+    <!-- Card Modal -->
+    <div id="cardModal" class="modal-overlay" hidden>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalCardName">Card Name</h3>
+                <button id="modalCloseBtn" class="modal-close" aria-label="Close modal">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-card-display">
+                    <img id="modalCardImage" alt="Card Image" class="modal-card-image">
+                    <div class="modal-card-info">
+                        <p id="modalCardSet" class="modal-card-set">Set Name</p>
+                        <div class="quantity-section">
+                            <h4>Quantity in Collection</h4>
+                            <div class="quantity-controls">
+                                <button id="decreaseQuantity" class="quantity-btn decrease" aria-label="Decrease quantity">−</button>
+                                <span id="currentQuantity" class="quantity-display">0</span>
+                                <button id="increaseQuantity" class="quantity-btn increase" aria-label="Increase quantity">+</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="backToScannerBtn" class="btn primary">📷 Back to Scanner</button>
+            </div>
+        </div>
+    </div>
+
     <script type="module" src="src/main.js"></script>
 </body>
 </html>
