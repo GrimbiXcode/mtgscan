@@ -356,48 +356,82 @@ class MTGScanner {
   }
 
   cropToCardFrame(sourceCanvas) {
-    // Calculate card frame position based on video dimensions
+    // Get actual video and frame border elements for precise measurements
     const videoRect = this.video.getBoundingClientRect();
+    const frameElement = document.querySelector('.frame-border');
+    const frameRect = frameElement.getBoundingClientRect();
+    
+    // Calculate the position of the frame relative to the video
+    const frameX = frameRect.left - videoRect.left;
+    const frameY = frameRect.top - videoRect.top;
+    const frameWidth = frameRect.width;
+    const frameHeight = frameRect.height;
+    
+    // Calculate scaling factors from video display size to actual video resolution
     const scaleX = sourceCanvas.width / videoRect.width;
     const scaleY = sourceCanvas.height / videoRect.height;
-
-    // Card frame dimensions (300x420 from CSS, centered)
-    const frameWidth = 300 * scaleX;
-    const frameHeight = 420 * scaleY;
-    const frameX = (sourceCanvas.width - frameWidth) / 2;
-    const frameY = (sourceCanvas.height - frameHeight) / 2;
-
+    
+    // Apply scaling to get actual crop coordinates in the source canvas
+    const cropX = frameX * scaleX;
+    const cropY = frameY * scaleY;
+    const cropWidth = frameWidth * scaleX;
+    const cropHeight = frameHeight * scaleY;
+    
+    // Ensure crop coordinates are within bounds
+    const safeCropX = Math.max(0, Math.min(cropX, sourceCanvas.width - cropWidth));
+    const safeCropY = Math.max(0, Math.min(cropY, sourceCanvas.height - cropHeight));
+    const safeCropWidth = Math.min(cropWidth, sourceCanvas.width - safeCropX);
+    const safeCropHeight = Math.min(cropHeight, sourceCanvas.height - safeCropY);
+    
+    console.log('Crop coordinates:', {
+      frameRect: { x: frameRect.left, y: frameRect.top, w: frameRect.width, h: frameRect.height },
+      videoRect: { x: videoRect.left, y: videoRect.top, w: videoRect.width, h: videoRect.height },
+      sourceCanvas: { w: sourceCanvas.width, h: sourceCanvas.height },
+      crop: { x: safeCropX, y: safeCropY, w: safeCropWidth, h: safeCropHeight },
+      scale: { x: scaleX, y: scaleY }
+    });
+    
     const canvas = document.createElement('canvas');
-    canvas.width = frameWidth;
-    canvas.height = frameHeight;
-
+    canvas.width = safeCropWidth;
+    canvas.height = safeCropHeight;
+    
     const ctx = canvas.getContext('2d');
     ctx.drawImage(
       sourceCanvas,
-      frameX, frameY, frameWidth, frameHeight,
-      0, 0, frameWidth, frameHeight
+      safeCropX, safeCropY, safeCropWidth, safeCropHeight,
+      0, 0, safeCropWidth, safeCropHeight
     );
-
+    
     return canvas;
   }
 
 
   cropToCollectorNumberArea(cardCanvas) {
-    // OPTIMAL coordinates found via systematic testing: x=2%, y=85%, w=12%, h=8%
-    const cropHeight = Math.floor(cardCanvas.height * 0.080);
-    const cropWidth = Math.floor(cardCanvas.width * 0.200);
-    const startY = Math.floor(cardCanvas.height * 0.900);
-    const startX = Math.floor(cardCanvas.width * 0.001);
+    // Match the CSS positioning: left: 0, top: 90%, width: 20%, height: 8%
+    const cropWidth = Math.floor(cardCanvas.width * 0.20);   // 20% width
+    const cropHeight = Math.floor(cardCanvas.height * 0.08); // 8% height
+    const startX = 0;                                        // left: 0
+    const startY = Math.floor(cardCanvas.height * 0.90);     // top: 90%
+
+    // Ensure we don't go outside canvas bounds
+    const safeStartY = Math.min(startY, cardCanvas.height - cropHeight);
+    const safeWidth = Math.min(cropWidth, cardCanvas.width);
+    const safeHeight = Math.min(cropHeight, cardCanvas.height - safeStartY);
+
+    console.log('Collector number crop:', {
+      cardCanvas: { w: cardCanvas.width, h: cardCanvas.height },
+      crop: { x: startX, y: safeStartY, w: safeWidth, h: safeHeight }
+    });
 
     const canvas = document.createElement('canvas');
-    canvas.width = cropWidth;
-    canvas.height = cropHeight;
+    canvas.width = safeWidth;
+    canvas.height = safeHeight;
 
     const ctx = canvas.getContext('2d');
     ctx.drawImage(
       cardCanvas,
-      startX, startY, cropWidth, cropHeight,
-      0, 0, cropWidth, cropHeight
+      startX, safeStartY, safeWidth, safeHeight,
+      0, 0, safeWidth, safeHeight
     );
 
     return canvas;
@@ -533,34 +567,43 @@ class MTGScanner {
 
   // Alternative cropping methods for fallback
   cropToCollectorNumberAreaWider(cardCanvas) {
-    // Slightly wider crop (20% width instead of 15%)
-    const cropHeight = Math.floor(cardCanvas.height * 0.10);
-    const cropWidth = Math.floor(cardCanvas.width * 0.20);
-    const startY = cardCanvas.height - cropHeight;
-    const startX = 0;
+    // Slightly wider crop: 30% width, 10% height
+    const cropWidth = Math.floor(cardCanvas.width * 0.30);   // 30% width (wider)
+    const cropHeight = Math.floor(cardCanvas.height * 0.10); // 10% height (taller)
+    const startX = 0;                                        // left: 0
+    const startY = Math.floor(cardCanvas.height * 0.88);     // top: 88% (slightly higher)
+
+    const safeStartY = Math.min(startY, cardCanvas.height - cropHeight);
+    const safeWidth = Math.min(cropWidth, cardCanvas.width);
+    const safeHeight = Math.min(cropHeight, cardCanvas.height - safeStartY);
 
     const canvas = document.createElement('canvas');
-    canvas.width = cropWidth;
-    canvas.height = cropHeight;
+    canvas.width = safeWidth;
+    canvas.height = safeHeight;
 
     const ctx = canvas.getContext('2d');
-    ctx.drawImage(cardCanvas, startX, startY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+    ctx.drawImage(cardCanvas, startX, safeStartY, safeWidth, safeHeight, 0, 0, safeWidth, safeHeight);
     return canvas;
   }
 
   cropToCollectorNumberAreaOffset(cardCanvas) {
-    // Offset right by 5% in case collector number isn't at exact edge
-    const cropHeight = Math.floor(cardCanvas.height * 0.10);
-    const cropWidth = Math.floor(cardCanvas.width * 0.15);
-    const startY = cardCanvas.height - cropHeight;
-    const startX = Math.floor(cardCanvas.width * 0.05); // 5% offset
+    // Offset right by 5% in case collector number isn't at exact left edge
+    const cropWidth = Math.floor(cardCanvas.width * 0.20);   // 20% width
+    const cropHeight = Math.floor(cardCanvas.height * 0.08); // 8% height
+    const startX = Math.floor(cardCanvas.width * 0.05);      // 5% offset right
+    const startY = Math.floor(cardCanvas.height * 0.90);     // top: 90%
+
+    const safeStartX = Math.min(startX, cardCanvas.width - cropWidth);
+    const safeStartY = Math.min(startY, cardCanvas.height - cropHeight);
+    const safeWidth = Math.min(cropWidth, cardCanvas.width - safeStartX);
+    const safeHeight = Math.min(cropHeight, cardCanvas.height - safeStartY);
 
     const canvas = document.createElement('canvas');
-    canvas.width = cropWidth;
-    canvas.height = cropHeight;
+    canvas.width = safeWidth;
+    canvas.height = safeHeight;
 
     const ctx = canvas.getContext('2d');
-    ctx.drawImage(cardCanvas, startX, startY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+    ctx.drawImage(cardCanvas, safeStartX, safeStartY, safeWidth, safeHeight, 0, 0, safeWidth, safeHeight);
     return canvas;
   }
 
