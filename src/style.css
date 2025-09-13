@@ -136,8 +136,8 @@ header h1 {
 .collector-area {
     position: absolute;
     left: 0;
-    top: 90%;
-    width: 20%;
+    top: 92%;
+    width: 30%;
     height: 8%;
     border: 2px dashed #f39c12;
     background: rgba(243, 156, 18, 0.2);
@@ -529,6 +529,137 @@ header h1 {
     font-size: 0.8rem;
     margin-right: 0.5rem;
     margin-bottom: 0.5rem;
+}
+
+/* Notification System */
+.notification-container {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-width: 400px;
+}
+
+.notification {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    padding: 1rem 1.5rem;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    transform: translateX(450px);
+    opacity: 0;
+    transition: all 0.3s ease;
+    border-left: 4px solid #3498db;
+    position: relative;
+    min-height: 60px;
+}
+
+.notification.show {
+    transform: translateX(0);
+    opacity: 1;
+}
+
+.notification.hide {
+    transform: translateX(450px);
+    opacity: 0;
+}
+
+/* Notification Types */
+.notification.success {
+    border-left-color: #27ae60;
+    background: #f8fff9;
+}
+
+.notification.error {
+    border-left-color: #e74c3c;
+    background: #fff8f8;
+}
+
+.notification.warning {
+    border-left-color: #f39c12;
+    background: #fffcf5;
+}
+
+.notification.info {
+    border-left-color: #3498db;
+    background: #f8fcff;
+}
+
+/* Notification Content */
+.notification-icon {
+    font-size: 1.2rem;
+    line-height: 1;
+    margin-top: 0.1rem;
+    flex-shrink: 0;
+}
+
+.notification.success .notification-icon {
+    color: #27ae60;
+}
+
+.notification.error .notification-icon {
+    color: #e74c3c;
+}
+
+.notification.warning .notification-icon {
+    color: #f39c12;
+}
+
+.notification.info .notification-icon {
+    color: #3498db;
+}
+
+.notification-content {
+    flex: 1;
+    font-size: 0.95rem;
+    line-height: 1.4;
+    color: #2c3e50;
+}
+
+.notification-close {
+    background: none;
+    border: none;
+    color: #7f8c8d;
+    cursor: pointer;
+    font-size: 1.1rem;
+    line-height: 1;
+    padding: 0;
+    margin-left: 0.5rem;
+    flex-shrink: 0;
+    transition: color 0.2s;
+}
+
+.notification-close:hover {
+    color: #2c3e50;
+}
+
+/* Mobile responsiveness for notifications */
+@media (max-width: 768px) {
+    .notification-container {
+        top: 0.5rem;
+        right: 0.5rem;
+        left: 0.5rem;
+        max-width: none;
+    }
+
+    .notification {
+        transform: translateY(-100px);
+        padding: 0.75rem 1rem;
+        font-size: 0.9rem;
+    }
+
+    .notification.show {
+        transform: translateY(0);
+    }
+
+    .notification.hide {
+        transform: translateY(-100px);
+    }
 }
 
 /* Utility Classes */
