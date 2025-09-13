@@ -24,7 +24,16 @@
         <main>
             <!-- Camera Section -->
             <section id="cameraSection" class="camera-section">
-                <div class="camera-container">
+                <!-- Start camera controls (always visible) -->
+                <div class="start-camera-controls">
+                    <button id="startCamera" class="btn primary">📷 Kamera starten</button>
+                    <div class="upload-divider">oder</div>
+                    <input type="file" id="fileInput" accept="image/*" hidden>
+                    <button id="uploadCard" class="btn secondary">📁 Bild hochladen</button>
+                </div>
+
+                <!-- Camera container (hidden when camera stopped) -->
+                <div id="cameraContainer" class="camera-container" hidden>
                     <video id="video" autoplay playsinline></video>
                     <div class="card-frame">
                         <div class="frame-border">
@@ -34,7 +43,14 @@
                     <canvas id="canvas" hidden></canvas>
                 </div>
 
-                <div class="frame-size-controls">
+                <!-- Camera operation buttons (directly under video, hidden when camera stopped) -->
+                <div id="cameraOperationControls" class="camera-operation-controls" hidden>
+                    <button id="captureCard" class="btn success">📸 Karte scannen</button>
+                    <button id="stopCamera" class="btn danger">⏹️ Stoppen</button>
+                </div>
+
+                <!-- Frame size controls (hidden when camera stopped) -->
+                <div id="frameSizeControls" class="frame-size-controls" hidden>
                     <label for="frameSizeSlider" class="frame-size-label">
                         📏 Rahmen-Größe: <span id="frameSizeValue">Medium</span>
                     </label>
@@ -43,15 +59,6 @@
                         <input type="range" id="frameSizeSlider" min="0.5" max="2" step="0.1" value="1" class="frame-size-slider">
                         <span class="size-label">Groß</span>
                     </div>
-                </div>
-
-                <div class="camera-controls">
-                    <button id="startCamera" class="btn primary">📷 Kamera starten</button>
-                    <button id="captureCard" class="btn" disabled>📸 Karte scannen</button>
-                    <button id="stopCamera" class="btn" disabled>⏹️ Stoppen</button>
-                    <div class="upload-divider">oder</div>
-                    <input type="file" id="fileInput" accept="image/*" hidden>
-                    <button id="uploadCard" class="btn secondary">📁 Bild hochladen</button>
                 </div>
             </section>
 

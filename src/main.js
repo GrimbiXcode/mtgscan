@@ -14,6 +14,9 @@ class MTGScanner {
     this.updateCardCount();
     this.renderCollection();
     this.initCollectionRecognitions();
+    
+    // Initialize UI state (camera stopped by default)
+    this.hideCameraUI();
   }
 
   initElements() {
@@ -22,6 +25,11 @@ class MTGScanner {
     this.stopCameraBtn = document.getElementById('stopCamera');
     this.uploadCardBtn = document.getElementById('uploadCard');
     this.fileInput = document.getElementById('fileInput');
+
+    // New UI elements for improved visibility control
+    this.cameraContainer = document.getElementById('cameraContainer');
+    this.cameraOperationControls = document.getElementById('cameraOperationControls');
+    this.frameSizeControls = document.getElementById('frameSizeControls');
 
     this.processingSection = document.getElementById('processingSection');
     this.resultsSection = document.getElementById('resultsSection');
@@ -173,9 +181,13 @@ class MTGScanner {
 
       this.video.srcObject = this.stream;
 
+      // Update button states
       this.startCameraBtn.disabled = true;
       this.captureCardBtn.disabled = false;
       this.stopCameraBtn.disabled = false;
+
+      // Show camera-related UI elements
+      this.showCameraUI();
 
     } catch (error) {
       this.showError('Kamera konnte nicht gestartet werden: ' + error.message);
@@ -188,9 +200,35 @@ class MTGScanner {
       this.stream = null;
     }
 
+    // Update button states
     this.startCameraBtn.disabled = false;
     this.captureCardBtn.disabled = true;
     this.stopCameraBtn.disabled = true;
+
+    // Hide camera-related UI elements
+    this.hideCameraUI();
+  }
+
+  showCameraUI() {
+    // Show camera container and controls when camera is running
+    this.cameraContainer.removeAttribute('hidden');
+    this.cameraOperationControls.removeAttribute('hidden');
+    this.frameSizeControls.removeAttribute('hidden');
+    console.log('Camera UI elements shown');
+  }
+
+  hideCameraUI() {
+    // Hide camera container and controls when camera is stopped
+    if (this.cameraContainer) {
+      this.cameraContainer.setAttribute('hidden', '');
+    }
+    if (this.cameraOperationControls) {
+      this.cameraOperationControls.setAttribute('hidden', '');
+    }
+    if (this.frameSizeControls) {
+      this.frameSizeControls.setAttribute('hidden', '');
+    }
+    console.log('Camera UI elements hidden');
   }
 
   // Upload methods
