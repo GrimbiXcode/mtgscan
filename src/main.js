@@ -38,10 +38,13 @@ class MTGScanner {
     this.cardList = document.getElementById('cardList');
     this.exportCollectionBtn = document.getElementById('exportCollection');
     this.clearCollectionBtn = document.getElementById('clearCollection');
-    
+
     // Frame size controls
     this.frameSizeSlider = document.getElementById('frameSizeSlider');
     this.frameSizeValue = document.getElementById('frameSizeValue');
+
+    // Notification system
+    this.notificationContainer = document.getElementById('notificationContainer');
   }
 
   initEventListeners() {
@@ -56,7 +59,7 @@ class MTGScanner {
 
     this.exportCollectionBtn.addEventListener('click', () => this.exportCollection());
     this.clearCollectionBtn.addEventListener('click', () => this.clearCollection());
-    
+
     // Frame size control
     this.frameSizeSlider.addEventListener('input', (e) => this.updateFrameSize(parseFloat(e.target.value)));
   }
@@ -65,7 +68,7 @@ class MTGScanner {
     // Load saved frame size from localStorage or use default
     const savedFrameSize = localStorage.getItem('mtg-scanner-frame-size');
     const frameSize = savedFrameSize ? parseFloat(savedFrameSize) : 1.0;
-    
+
     this.frameSizeSlider.value = frameSize;
     this.updateFrameSize(frameSize);
   }
@@ -73,7 +76,7 @@ class MTGScanner {
   updateFrameSize(scale) {
     // Update CSS variable for frame scale
     document.documentElement.style.setProperty('--frame-scale', scale);
-    
+
     // Update the display value
     let sizeText = 'Medium';
     if (scale <= 0.7) {
@@ -87,12 +90,12 @@ class MTGScanner {
     } else {
       sizeText = 'Groß';
     }
-    
+
     this.frameSizeValue.textContent = `${sizeText} (${scale.toFixed(1)}x)`;
-    
+
     // Save to localStorage
     localStorage.setItem('mtg-scanner-frame-size', scale.toString());
-    
+
     console.log('Frame size updated:', scale);
   }
 
@@ -151,7 +154,7 @@ class MTGScanner {
       this.stopCameraBtn.disabled = false;
 
     } catch (error) {
-      alert('Kamera konnte nicht gestartet werden: ' + error.message);
+      this.showError('Kamera konnte nicht gestartet werden: ' + error.message);
     }
   }
 
@@ -177,7 +180,7 @@ class MTGScanner {
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      alert('Bitte wählen Sie eine Bilddatei aus.');
+      this.showError('Bitte wählen Sie eine Bilddatei aus.');
       return;
     }
 
@@ -188,7 +191,7 @@ class MTGScanner {
       // Process the uploaded image using the same workflow as camera
       await this.processUploadedImage(canvas);
     } catch (error) {
-      alert('Fehler beim Verarbeiten des Bildes: ' + error.message);
+      this.showError('Fehler beim Verarbeiten des Bildes: ' + error.message);
     }
 
     // Clear the file input
@@ -225,19 +228,13 @@ class MTGScanner {
       // or we use the full image and try to find collector number area
       const cardCanvas = this.smartCropUploadedImage(canvas);
 
-      // Crop to collector number area (bottom left)
-      //this.updateStatus('Sammlernummer wird extrahiert...', 60);
-      //const collectorCanvas = this.cropToCollectorNumberArea(cardCanvas);
-
       // Store processed images for debugging
       this.lastCapturedImage = canvas.toDataURL();
       this.lastCardImage = cardCanvas.toDataURL();
 
       // OCR for collector number with fallback strategy
-      this.updateStatus('Sammlernummer wird erkannt...', 80);
+      this.updateStatus('Sammlernummer wird erkannt...', 50);
       const collectorInfo = await this.performCollectorNumberOCRWithFallback(cardCanvas);
-
-      //this.lastCollectorImage = collectorCanvas.toDataURL();
 
       // Search card by collector number
       this.updateStatus('Karte wird gesucht...', 90);
@@ -247,8 +244,9 @@ class MTGScanner {
 
       if (cardData) {
         this.showResults(cardData, cardCanvas, `Sammlernummer: ${collectorInfo}`);
+        this.showSuccess(`Karte ${cardData.name} wurde gefunden.`)
       } else {
-        alert(`Karte mit Sammlernummer "${collectorInfo}" wurde nicht gefunden.`);
+        this.showWarning(`Karte mit Sammlernummer "${collectorInfo}" wurde nicht gefunden.`);
         // Show results anyway for debugging
         this.showResults({
           name: `Unbekannte Karte (${collectorInfo})`,
@@ -258,7 +256,7 @@ class MTGScanner {
       }
 
     } catch (error) {
-      alert('Fehler beim Verarbeiten: ' + error.message);
+      this.showError('Fehler beim Verarbeiten: ' + error.message);
     } finally {
       this.isProcessing = false;
       this.showProcessing(false);
@@ -339,21 +337,12 @@ class MTGScanner {
       this.updateStatus('Karte wird zugeschnitten...', 40);
       const cardCanvas = this.cropToCardFrame(canvas);
 
-      // Crop to collector number area (bottom left)
-      //this.updateStatus('Sammlernummer wird extrahiert...', 60);
-      //const collectorCanvas = this.cropToCollectorNumberArea(cardCanvas);
-
-      // THIS STEP IS MADE IN 'performCollectorNumberOCRWithFallback'
-      // Simple image processing for collector numbers
-      //this.updateStatus('Bild wird optimiert...', 70);
-      //this.processCollectorNumberImage(collectorCanvas);
-
       // Store processed images for debugging
       this.lastCapturedImage = canvas.toDataURL();
       this.lastCardImage = cardCanvas.toDataURL();
 
       // OCR for collector number with fallback strategy
-      this.updateStatus('Sammlernummer wird erkannt...', 80);
+      this.updateStatus('Sammlernummer wird erkannt...', 50);
       const collectorInfo = await this.performCollectorNumberOCRWithFallback(cardCanvas);
 
 
@@ -365,8 +354,9 @@ class MTGScanner {
 
       if (cardData) {
         this.showResults(cardData, cardCanvas, `Sammlernummer: ${collectorInfo}`);
+        this.showSuccess(`Karte ${cardData.name} wurde gefunden.`)
       } else {
-        alert(`Karte mit Sammlernummer "${collectorInfo}" wurde nicht gefunden.`);
+        this.showWarning(`Karte mit Sammlernummer "${collectorInfo}" wurde nicht gefunden.`);
         // Show results anyway for debugging
         this.showResults({
           name: `Unbekannte Karte (${collectorInfo})`,
@@ -376,7 +366,7 @@ class MTGScanner {
       }
 
     } catch (error) {
-      alert('Fehler beim Scannen: ' + error.message);
+      this.showError('Fehler beim Scannen: ' + error.message);
     } finally {
       this.isProcessing = false;
       this.showProcessing(false);
@@ -403,29 +393,29 @@ class MTGScanner {
     const videoRect = this.video.getBoundingClientRect();
     const frameElement = document.querySelector('.frame-border');
     const frameRect = frameElement.getBoundingClientRect();
-    
+
     // Calculate the position of the frame relative to the video
     const frameX = frameRect.left - videoRect.left;
     const frameY = frameRect.top - videoRect.top;
     const frameWidth = frameRect.width;
     const frameHeight = frameRect.height;
-    
+
     // Calculate scaling factors from video display size to actual video resolution
     const scaleX = sourceCanvas.width / videoRect.width;
     const scaleY = sourceCanvas.height / videoRect.height;
-    
+
     // Apply scaling to get actual crop coordinates in the source canvas
     const cropX = frameX * scaleX;
     const cropY = frameY * scaleY;
     const cropWidth = frameWidth * scaleX;
     const cropHeight = frameHeight * scaleY;
-    
+
     // Ensure crop coordinates are within bounds
     const safeCropX = Math.max(0, Math.min(cropX, sourceCanvas.width - cropWidth));
     const safeCropY = Math.max(0, Math.min(cropY, sourceCanvas.height - cropHeight));
     const safeCropWidth = Math.min(cropWidth, sourceCanvas.width - safeCropX);
     const safeCropHeight = Math.min(cropHeight, sourceCanvas.height - safeCropY);
-    
+
     console.log('Crop coordinates:', {
       frameRect: { x: frameRect.left, y: frameRect.top, w: frameRect.width, h: frameRect.height },
       videoRect: { x: videoRect.left, y: videoRect.top, w: videoRect.width, h: videoRect.height },
@@ -433,28 +423,27 @@ class MTGScanner {
       crop: { x: safeCropX, y: safeCropY, w: safeCropWidth, h: safeCropHeight },
       scale: { x: scaleX, y: scaleY }
     });
-    
+
     const canvas = document.createElement('canvas');
     canvas.width = safeCropWidth;
     canvas.height = safeCropHeight;
-    
+
     const ctx = canvas.getContext('2d');
     ctx.drawImage(
       sourceCanvas,
       safeCropX, safeCropY, safeCropWidth, safeCropHeight,
       0, 0, safeCropWidth, safeCropHeight
     );
-    
+
     return canvas;
   }
 
-
   cropToCollectorNumberArea(cardCanvas) {
     // Match the CSS positioning: left: 0, top: 90%, width: 20%, height: 8%
-    const cropWidth = Math.floor(cardCanvas.width * 0.20);   // 20% width
+    const cropWidth = Math.floor(cardCanvas.width * 0.30);   // 30% width
     const cropHeight = Math.floor(cardCanvas.height * 0.08); // 8% height
     const startX = 0;                                        // left: 0
-    const startY = Math.floor(cardCanvas.height * 0.90);     // top: 90%
+    const startY = Math.floor(cardCanvas.height * 0.92);     // top: 92%
 
     // Ensure we don't go outside canvas bounds
     const safeStartY = Math.min(startY, cardCanvas.height - cropHeight);
@@ -559,6 +548,7 @@ class MTGScanner {
     ];
 
     let bestResult = { text: '', score: 0, strategy: 'none' };
+    let statusOffset = 0;
 
     for (const strategy of strategies) {
       try {
@@ -593,9 +583,13 @@ class MTGScanner {
           };
         }
 
+        statusOffset += 10;
+        this.updateStatus(`Sammlernummer wird erkannt... %`, 50 + statusOffset);
+
         // If we got a high-confidence result, use it immediately
         if (score >= 80) {
           console.log(`High confidence result from ${strategy.name}: "${text}"`);
+          this.updateStatus(`Sammelnummer mit hoher wahrscheinlichkeit gefunden %`, 80);
           break;
         }
 
@@ -611,7 +605,7 @@ class MTGScanner {
   // Alternative cropping methods for fallback
   cropToCollectorNumberAreaWider(cardCanvas) {
     // Slightly wider crop: 30% width, 10% height
-    const cropWidth = Math.floor(cardCanvas.width * 0.30);   // 30% width (wider)
+    const cropWidth = Math.floor(cardCanvas.width * 0.40);   // 40% width (wider)
     const cropHeight = Math.floor(cardCanvas.height * 0.10); // 10% height (taller)
     const startX = 0;                                        // left: 0
     const startY = Math.floor(cardCanvas.height * 0.88);     // top: 88% (slightly higher)
@@ -631,7 +625,7 @@ class MTGScanner {
 
   cropToCollectorNumberAreaOffset(cardCanvas) {
     // Offset right by 5% in case collector number isn't at exact left edge
-    const cropWidth = Math.floor(cardCanvas.width * 0.20);   // 20% width
+    const cropWidth = Math.floor(cardCanvas.width * 0.30);   // 30% width
     const cropHeight = Math.floor(cardCanvas.height * 0.08); // 8% height
     const startX = Math.floor(cardCanvas.width * 0.05);      // 5% offset right
     const startY = Math.floor(cardCanvas.height * 0.90);     // top: 90%
@@ -873,7 +867,7 @@ class MTGScanner {
       );
       this.resultImage.classList.remove('loading');
     }
-    
+
     this.resultName.textContent = cardData.name;
     this.resultSet.textContent = cardData.set;
 
@@ -905,7 +899,7 @@ class MTGScanner {
       this.updateCardCount();
       this.renderCollection();
 
-      alert(`"${this.currentCard.name}" wurde zur Sammlung hinzugefügt!`);
+      this.showSuccess(`"${this.currentCard.name}" wurde zur Sammlung hinzugefügt!`);
     }
   }
 
@@ -925,7 +919,7 @@ class MTGScanner {
     for (const card of this.cards) {
       const cardElement = document.createElement('div');
       cardElement.className = 'card-item';
-      
+
       // Create the card element structure
       cardElement.innerHTML = `
                 <img alt="${card.name}" data-loading="true">
@@ -938,9 +932,9 @@ class MTGScanner {
                     </div>
                 </div>
             `;
-      
+
       const imgElement = cardElement.querySelector('img');
-      
+
       // Fetch and set the image asynchronously
       try {
         const imageUrl = await this.fetchCardImage(card.image);
@@ -957,7 +951,7 @@ class MTGScanner {
         );
         imgElement.removeAttribute('data-loading');
       }
-      
+
       this.cardList.appendChild(cardElement);
     }
   }
@@ -1030,15 +1024,15 @@ class MTGScanner {
     if (this.lastCapturedImage) {
       this.displayDebugImage(this.lastCapturedImage, '📷 Original Image');
     } else {
-      alert('Kein aufgenommenes Bild verfügbar');
+      this.showInfo('Kein aufgenommenes Bild verfügbar');
     }
   }
 
   showCardImage() {
     if (this.lastCardImage) {
-      this.displayDebugImage(this.lastCardImage, '🎴 Card Image');
+      this.displayDebugImage(this.lastCardImage, '🏄 Card Image');
     } else {
-      alert('Kein Kartenbild verfügbar');
+      this.showInfo('Kein Kartenbild verfügbar');
     }
   }
 
@@ -1048,7 +1042,7 @@ class MTGScanner {
       const lastCollectorImage = this.collectorImages[this.collectorImages.length - 1];
       this.displayDebugImage(lastCollectorImage, '🔢 Collector Number Area');
     } else {
-      alert('Kein Sammlernummernbild verfügbar');
+      this.showInfo('Kein Sammlernummernbild verfügbar');
     }
   }
 
@@ -1080,7 +1074,7 @@ class MTGScanner {
     const cacheKey = `card-image-${btoa(imageUrl)}`;
     const cachedImage = localStorage.getItem(cacheKey);
     const cachedTimestamp = localStorage.getItem(`${cacheKey}-timestamp`);
-    
+
     // Use cached image if it exists and is less than 24 hours old
     if (cachedImage && cachedTimestamp) {
       const ageInHours = (Date.now() - parseInt(cachedTimestamp)) / (1000 * 60 * 60);
@@ -1092,7 +1086,7 @@ class MTGScanner {
 
     try {
       console.log('Fetching image:', imageUrl);
-      
+
       // Fetch the image
       const response = await fetch(imageUrl, {
         method: 'GET',
@@ -1108,10 +1102,10 @@ class MTGScanner {
 
       // Convert to blob
       const blob = await response.blob();
-      
+
       // Convert blob to data URL
       const dataUrl = await this.blobToDataUrl(blob);
-      
+
       // Cache the result (but limit cache size to prevent storage issues)
       try {
         localStorage.setItem(cacheKey, dataUrl);
@@ -1122,9 +1116,9 @@ class MTGScanner {
         // Clear old cached images if storage is full
         this.clearOldImageCache();
       }
-      
+
       return dataUrl;
-      
+
     } catch (error) {
       console.error('Error fetching image:', error);
       throw error;
@@ -1146,7 +1140,7 @@ class MTGScanner {
     const keys = Object.keys(localStorage);
     const imageKeys = keys.filter(key => key.startsWith('card-image-'));
     const timestampKeys = keys.filter(key => key.includes('-timestamp'));
-    
+
     // Sort by timestamp and remove oldest entries
     const entries = timestampKeys
       .map(key => ({
@@ -1154,7 +1148,7 @@ class MTGScanner {
         timestamp: parseInt(localStorage.getItem(key) || '0')
       }))
       .sort((a, b) => a.timestamp - b.timestamp);
-    
+
     // Remove oldest 25% of cached images
     const toRemove = Math.ceil(entries.length * 0.25);
     for (let i = 0; i < toRemove; i++) {
@@ -1163,6 +1157,77 @@ class MTGScanner {
       localStorage.removeItem(`${entry.key}-timestamp`);
       console.log('Removed old cached image:', entry.key);
     }
+  }
+
+  // Notification system methods
+  showNotification(message, type = 'info', duration = 5000) {
+    const icons = {
+      success: '✅',
+      error: '❌',
+      warning: '⚠️',
+      info: 'ℹ️'
+    };
+
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    notification.innerHTML = `
+      <div class="notification-icon">${icons[type] || icons.info}</div>
+      <div class="notification-content">${message}</div>
+      <button class="notification-close" aria-label="Close notification">✕</button>
+    `;
+
+    // Add to container
+    this.notificationContainer.appendChild(notification);
+
+    // Handle close button
+    const closeBtn = notification.querySelector('.notification-close');
+    closeBtn.addEventListener('click', () => this.hideNotification(notification));
+
+    // Show with animation
+    requestAnimationFrame(() => {
+      notification.classList.add('show');
+    });
+
+    // Auto-dismiss after duration
+    if (duration > 0) {
+      setTimeout(() => {
+        this.hideNotification(notification);
+      }, duration);
+    }
+
+    return notification;
+  }
+
+  hideNotification(notification) {
+    if (!notification || !notification.parentNode) return;
+
+    notification.classList.add('hide');
+    notification.classList.remove('show');
+
+    // Remove from DOM after animation
+    setTimeout(() => {
+      if (notification.parentNode) {
+        notification.parentNode.removeChild(notification);
+      }
+    }, 300);
+  }
+
+  // Convenience methods for different notification types
+  showSuccess(message, duration = 4000) {
+    return this.showNotification(message, 'success', duration);
+  }
+
+  showError(message, duration = 6000) {
+    return this.showNotification(message, 'error', duration);
+  }
+
+  showWarning(message, duration = 5000) {
+    return this.showNotification(message, 'warning', duration);
+  }
+
+  showInfo(message, duration = 4000) {
+    return this.showNotification(message, 'info', duration);
   }
 }
 
