@@ -10,7 +10,7 @@
     <div class="app">
         <!-- Notification Container -->
         <div id="notificationContainer" class="notification-container"></div>
-        
+
         <header>
             <h1>🎴 MTG Scanner</h1>
             <div class="controls">
@@ -68,7 +68,7 @@
             <section id="resultsSection" class="results-section">
                 <h3>📋 Erkannte Karte</h3>
                 <div class="result-card">
-                    <img id="resultImage" alt="Card">
+                    <img id="resultImage" alt="Card" src="assets/default-card.png">
                     <div class="result-info">
                         <h4 id="resultName">-</h4>
                         <p id="resultSet">-</p>
@@ -86,7 +86,7 @@
                             </div>
                             <div class="debug-image-display" id="debugImageDisplay" hidden>
                                 <h6 id="debugImageTitle">Debug Image</h6>
-                                <img id="debugImage" alt="Debug Image">
+                                <img id="debugImage" alt="Debug Image" src="">
                                 <button onclick="mtgScanner.hideDebugImage()" class="btn small">✕ Close</button>
                             </div>
                         </div>
@@ -115,7 +115,7 @@
             </div>
             <div class="modal-body">
                 <div class="modal-card-display">
-                    <img id="modalCardImage" alt="Card Image" class="modal-card-image">
+                    <img id="modalCardImage" alt="Card Image" class="modal-card-image" src="">
                     <div class="modal-card-info">
                         <p id="modalCardSet" class="modal-card-set">Set Name</p>
                         <div class="quantity-section">
