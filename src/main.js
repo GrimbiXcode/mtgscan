@@ -14,7 +14,7 @@ class MTGScanner {
     this.updateCardCount();
     this.renderCollection();
     this.initCollectionRecognitions();
-    
+
     // Initialize UI state (camera stopped by default)
     this.hideCameraUI();
   }
@@ -23,6 +23,7 @@ class MTGScanner {
     this.startCameraBtn = document.getElementById('startCamera');
     this.captureCardBtn = document.getElementById('captureCard');
     this.stopCameraBtn = document.getElementById('stopCamera');
+    this.flashToggleBtn = document.getElementById('flashToggle');
     this.uploadCardBtn = document.getElementById('uploadCard');
     this.fileInput = document.getElementById('fileInput');
 
@@ -70,6 +71,7 @@ class MTGScanner {
     this.startCameraBtn.addEventListener('click', () => this.startCamera());
     this.captureCardBtn.addEventListener('click', () => this.captureCard());
     this.stopCameraBtn.addEventListener('click', () => this.stopCamera());
+    this.flashToggleBtn.addEventListener('click', () => this.toggleFlash());
     this.uploadCardBtn.addEventListener('click', () => this.triggerFileUpload());
     this.fileInput.addEventListener('change', (e) => this.handleFileUpload(e));
 
@@ -181,6 +183,9 @@ class MTGScanner {
 
       this.video.srcObject = this.stream;
 
+      // Check for flash capability
+      await this.checkFlashCapability();
+
       // Update button states
       this.startCameraBtn.disabled = true;
       this.captureCardBtn.disabled = false;
@@ -228,7 +233,55 @@ class MTGScanner {
     if (this.frameSizeControls) {
       this.frameSizeControls.setAttribute('hidden', '');
     }
+    // Hide flash button when camera is stopped
+    if (this.flashToggleBtn) {
+      this.flashToggleBtn.setAttribute('hidden', '');
+    }
     console.log('Camera UI elements hidden');
+  }
+
+  async checkFlashCapability() {
+    try {
+      if (this.stream) {
+        const videoTrack = this.stream.getVideoTracks()[0];
+        const capabilities = videoTrack.getCapabilities();
+
+        if (capabilities.torch) {
+          // Device has flash capability, show the flash button
+          this.flashToggleBtn.removeAttribute('hidden');
+          this.flashEnabled = false;
+          this.flashToggleBtn.textContent = '🔦 Blitz';
+          console.log('Flash capability detected');
+        } else {
+          // No flash capability, keep button hidden
+          this.flashToggleBtn.setAttribute('hidden', '');
+          console.log('No flash capability detected');
+        }
+      }
+    } catch (error) {
+      console.log('Error checking flash capability:', error);
+      this.flashToggleBtn.setAttribute('hidden', '');
+    }
+  }
+
+  async toggleFlash() {
+    try {
+      if (this.stream) {
+        const videoTrack = this.stream.getVideoTracks()[0];
+        this.flashEnabled = !this.flashEnabled;
+
+        await videoTrack.applyConstraints({
+          advanced: [{ torch: this.flashEnabled }]
+        });
+
+        // Update button text
+        this.flashToggleBtn.textContent = this.flashEnabled ? '🔦 Aus' : '🔦 Blitz';
+        console.log('Flash toggled:', this.flashEnabled ? 'on' : 'off');
+      }
+    } catch (error) {
+      console.error('Error toggling flash:', error);
+      this.showError('Blitz konnte nicht umgeschaltet werden');
+    }
   }
 
   // Upload methods
@@ -1066,7 +1119,7 @@ class MTGScanner {
                     <p>${card.set}</p>
                     <p>Anzahl: ${card.count || 1}</p>
                     <div class="card-item-actions">
-                        <button class="btn" onclick="mtgScanner.removeCard('${card.id}')">🗑️</button>
+                        <button class="btn danger" onclick="mtgScanner.removeCard('${card.id}')">🗑️</button>
                     </div>
                 </div>
             `;
