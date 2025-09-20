@@ -119,3 +119,6 @@ playwright-report/
 # Optional: Exclude exported card collections (if you don't want to track them)
 # exports/
 # *.csv
+
+# archive files that are generated for the image export
+.gz
