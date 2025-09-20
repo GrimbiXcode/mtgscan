@@ -60,6 +60,8 @@ class MTGScanner {
     this.modalCardName = document.getElementById('modalCardName');
     this.modalCardImage = document.getElementById('modalCardImage');
     this.modalCardSet = document.getElementById('modalCardSet');
+    this.modalCardLanguage = document.getElementById('modalCardLanguage');
+    this.modalLanguageText = document.getElementById('modalLanguageText');
     this.currentQuantity = document.getElementById('currentQuantity');
     this.increaseQuantityBtn = document.getElementById('increaseQuantity');
     this.decreaseQuantityBtn = document.getElementById('decreaseQuantity');
@@ -768,6 +770,7 @@ class MTGScanner {
     const hasCollectionCode = this.collectionRegex.test(text);
     const hasRarityCode = /\s[CURMBLST]\s/.test(text);
     const hasCardNumber = /\d{3,5}/.test(text);
+    const hasLanguageCode = /\b(EN|DE|FR|ES|IT|PT|JP|KO|RU|ZH)\b/.test(text);
 
     if (hasCollectionCode) {
       score += 50;
@@ -779,6 +782,10 @@ class MTGScanner {
 
     if (hasCardNumber) {
       score += 30;
+    }
+
+    if (hasLanguageCode) {
+      score += 10;
     }
 
     if (text.length > 10) {
@@ -846,17 +853,26 @@ class MTGScanner {
         return null;
       }
 
-      const { setCode, collectorNumber } = parsed;
-      console.log('Parsed collector info:', setCode, collectorNumber);
+      const { setCode, collectorNumber, language } = parsed;
+      console.log('Parsed collector info:', setCode, collectorNumber, language);
+
+      // Build Scryfall URL with language parameter if detected
+      let apiUrl = `https://api.scryfall.com/cards/${setCode.toLowerCase()}/${parseInt(collectorNumber, 10)}`;
+      
+      // Add language parameter if we detected a language
+      if (language) {
+        const scryfallLang = this.mapLanguageCode(language);
+        apiUrl += `?lang=${scryfallLang}`;
+        console.log('Using language-specific API URL:', apiUrl);
+      }
 
       // Use exact Scryfall lookup by set and collector number
-      const response = await fetch(`https://api.scryfall.com/cards/${setCode.toLowerCase()}/${parseInt(collectorNumber, 10)}`,
-        {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json'
-          }
-        });
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
 
       if (response.ok) {
         const card = await response.json();
@@ -866,12 +882,14 @@ class MTGScanner {
           image: card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal,
           id: card.id,
           collectorNumber: card.collector_number,
-          setCode: card.set.toUpperCase()
+          setCode: card.set.toUpperCase(),
+          language: language || 'EN', // Store the original detected language code or default to EN
+          languageDisplay: this.getLanguageDisplayName(language || 'EN')
         };
       } else if (response.status === 404) {
         console.log('Card not found with exact lookup, trying fallback search');
-        // Fallback to fuzzy search if exact lookup fails
-        return await this.searchCardFallback(collectorInfo);
+        // Fallback to fuzzy search if exact lookup fails  
+        return await this.searchCardFallback(collectorInfo, language);
       }
     } catch (error) {
       console.error('Card search error:', error);
@@ -901,7 +919,8 @@ class MTGScanner {
 
     const cardInfo = {
       collectorNumber: null,
-      setCode: null
+      setCode: null,
+      language: null
     }
 
     const collectionMatch = this.collectionRegex.exec(cleaned);
@@ -916,14 +935,56 @@ class MTGScanner {
       cardInfo.collectorNumber = number;
     }
 
+    // Extract language code - look for 2-letter language codes like EN, DE, FR, etc.
+    const languageMatch = /\b(?<lang>EN|DE|FR|ES|IT|PT|JP|KO|RU|ZH)\b/.exec(cleaned);
+    if (languageMatch) {
+      const { lang } = languageMatch.groups;
+      cardInfo.language = lang;
+      console.log('Detected language:', lang);
+    }
+
     if (cardInfo.collectorNumber && cardInfo.setCode) {
-      console.log('Parsed collector info:', cardInfo.setCode, cardInfo.collectorNumber);
+      console.log('Parsed collector info:', cardInfo.setCode, cardInfo.collectorNumber, cardInfo.language);
       return cardInfo;
     }
 
     console.log('Failed to parse collector info:', cleaned);
-    console.log('Matched:', collectionMatch, numberMatch);
+    console.log('Matched:', collectionMatch, numberMatch, languageMatch);
     return null;
+  }
+
+  // Map 2-letter language codes from OCR to Scryfall language codes
+  mapLanguageCode(ocrLanguageCode) {
+    const languageMap = {
+      'EN': 'en',
+      'DE': 'de', 
+      'FR': 'fr',
+      'ES': 'es',
+      'IT': 'it',
+      'PT': 'pt',
+      'JP': 'ja',
+      'KO': 'ko', 
+      'RU': 'ru',
+      'ZH': 'zhs' // Simplified Chinese for Scryfall
+    };
+    return languageMap[ocrLanguageCode] || 'en'; // Default to English
+  }
+
+  // Get full language name for display
+  getLanguageDisplayName(languageCode) {
+    const displayNames = {
+      'EN': 'English',
+      'DE': 'German', 
+      'FR': 'French',
+      'ES': 'Spanish',
+      'IT': 'Italian',
+      'PT': 'Portuguese',
+      'JP': 'Japanese',
+      'KO': 'Korean', 
+      'RU': 'Russian',
+      'ZH': 'Chinese'
+    };
+    return displayNames[languageCode] || 'English';
   }
 
   guessRecentSet() {
@@ -932,9 +993,9 @@ class MTGScanner {
     return recentSets[0]; // Default to most recent
   }
 
-  async searchCardFallback(collectorInfo) {
+  async searchCardFallback(collectorInfo, language = null) {
     // If exact lookup fails, we could try other approaches
-    console.log('Attempting fallback search for:', collectorInfo);
+    console.log('Attempting fallback search for:', collectorInfo, 'with language:', language);
     return null; // For now, just return null
   }
 
@@ -970,6 +1031,14 @@ class MTGScanner {
     // Set modal content
     this.modalCardName.textContent = cardData.name;
     this.modalCardSet.textContent = cardData.set;
+    
+    // Display language information
+    if (cardData.languageDisplay) {
+      this.modalLanguageText.textContent = cardData.languageDisplay;
+      this.modalCardLanguage.style.display = 'block';
+    } else {
+      this.modalCardLanguage.style.display = 'none';
+    }
 
     // Show loading state for modal image
     this.modalCardImage.classList.add('loading');
@@ -1036,7 +1105,10 @@ class MTGScanner {
       this.cards.push({
         ...this.currentCard,
         count: 1,
-        addedAt: new Date().toISOString()
+        addedAt: new Date().toISOString(),
+        // Ensure language fields are preserved
+        language: this.currentCard.language || 'EN',
+        languageDisplay: this.currentCard.languageDisplay || 'English'
       });
       this.showSuccess(`"${this.currentCard.name}" wurde zur Sammlung hinzugefügt!`);
     }
@@ -1077,7 +1149,10 @@ class MTGScanner {
         this.cards.push({
           ...this.currentCard,
           count: 1,
-          addedAt: new Date().toISOString()
+          addedAt: new Date().toISOString(),
+          // Ensure language fields are preserved
+          language: this.currentCard.language || 'EN',
+          languageDisplay: this.currentCard.languageDisplay || 'English'
         });
       }
 
@@ -1112,11 +1187,13 @@ class MTGScanner {
       cardElement.className = 'card-item';
 
       // Create the card element structure
+      const languageDisplay = card.languageDisplay ? `<p class="card-language">🌍 ${card.languageDisplay}</p>` : '';
       cardElement.innerHTML = `
                 <img alt="${card.name}" data-loading="true">
                 <div class="card-item-info">
                     <h5>${card.name}</h5>
                     <p>${card.set}</p>
+                    ${languageDisplay}
                     <p>Anzahl: ${card.count || 1}</p>
                     <div class="card-item-actions">
                         <button class="btn danger" onclick="mtgScanner.removeCard('${card.id}')">🗑️</button>
@@ -1165,13 +1242,13 @@ class MTGScanner {
     // Add each card to CSV
     for (const card of this.cards) {
       const row = [
-        card.count || 1,                    // Count
-        `"${card.name}"`,                   // Name (quoted to handle commas)
-        `"${card.set || ''}"`,              // Edition (set name)
-        'Near Mint',                        // Condition (default)
-        'English',                          // Language (default)
-        'No',                              // Foil (default)
-        card.collectorNumber || ''          // Collector Number
+        card.count || 1,                                    // Count
+        `"${card.name}"`,                                   // Name (quoted to handle commas)
+        `"${card.set || ''}"`,                              // Edition (set name)
+        'Near Mint',                                        // Condition (default)
+        card.languageDisplay || 'English',                 // Language (use detected language)
+        'No',                                              // Foil (default)
+        card.collectorNumber || ''                          // Collector Number
       ];
       csvRows.push(row);
     }
