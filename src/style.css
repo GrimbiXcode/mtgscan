@@ -946,3 +946,69 @@ header h1 {
 .mt-1 {
     margin-top: 1rem;
 }
+
+/* Footer Styles */
+.app-footer {
+    background: white;
+    margin-top: 2rem;
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    text-align: center;
+}
+
+.footer-content {
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.footer-text {
+    font-size: 0.95rem;
+    color: #495057;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.github-link {
+    color: #3498db;
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.github-link:hover {
+    color: #2980b9;
+    text-decoration: underline;
+}
+
+.footer-subtitle {
+    font-size: 0.85rem;
+    color: #6c757d;
+    font-style: italic;
+    margin: 0;
+}
+
+/* Mobile footer adjustments */
+@media (max-width: 768px) {
+    .app-footer {
+        margin-top: 1.5rem;
+        padding: 1rem;
+    }
+    
+    .footer-text {
+        font-size: 0.9rem;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+    
+    .footer-subtitle {
+        font-size: 0.8rem;
+    }
+}
