@@ -23,7 +23,8 @@ FROM nginx:alpine
 WORKDIR /usr/share/nginx/html
 COPY --from=build /app/dist ./
 # Copy static assets (e.g., default-card.png) required by the app
-COPY --from=build /app/assets ./assets
+COPY ./assets ./assets
+COPY ./public ./public
 
 EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://127.0.0.1/ || exit 1

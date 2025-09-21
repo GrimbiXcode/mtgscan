@@ -8,11 +8,11 @@
     "build": "vite build",
     "preview": "vite preview",
     "serve": "python3 -m http.server 8080",
-    "fetch-cards": "node fetch-card-names.js",
-    "test-ocr": "node test-ocr.js",
-    "test-ocr:help": "node test-ocr.js --help",
-    "test-ocr:advanced": "node test-ocr-advanced.js",
-    "test-ocr:advanced:help": "node test-ocr-advanced.js --help"
+    "fetch-cards": "node sandbox/fetch-card-names.js",
+    "test-ocr": "node sandbox/test-ocr.js",
+    "test-ocr:help": "node sandbox/test-ocr.js --help",
+    "test-ocr:advanced": "node sandbox/test-ocr-advanced.js",
+    "test-ocr:advanced:help": "node sandbox/test-ocr-advanced.js --help"
   },
   "keywords": [
     "mtg",
