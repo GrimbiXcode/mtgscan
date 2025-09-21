@@ -75,7 +75,6 @@ header h1 {
 
 .btn.secondary {
     background: #95a5a6;
-    border: 2px solid #7f8c8d;
 }
 
 .btn.secondary:hover:not(:disabled) {
@@ -242,14 +241,6 @@ header h1 {
     font-style: italic;
     padding: 0 0.5rem;
     font-size: 0.9rem;
-}
-
-/* Controls styling */
-.controls {
-    display: flex;
-    gap: 1rem;
-    align-items: center;
-    flex-wrap: wrap;
 }
 
 /* Scanner info display */
