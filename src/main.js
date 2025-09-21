@@ -837,7 +837,8 @@ class MTGScanner {
   async loadTesseract() {
     return new Promise((resolve, reject) => {
       const script = document.createElement('script');
-      script.src = 'https://unpkg.com/tesseract.js@v4.1.1/dist/tesseract.min.js';
+      script.src = 'https://unpkg.com/tesseract.js@v5.1.1/dist/tesseract.min.js';
+      script.crossOrigin = 'anonymous';
       script.onload = resolve;
       script.onerror = reject;
       document.head.appendChild(script);
@@ -858,7 +859,7 @@ class MTGScanner {
 
       // Build Scryfall URL with language parameter if detected
       let apiUrl = `https://api.scryfall.com/cards/${setCode.toLowerCase()}/${parseInt(collectorNumber, 10)}`;
-      
+
       // Add language parameter if we detected a language
       if (language) {
         const scryfallLang = this.mapLanguageCode(language);
@@ -888,7 +889,7 @@ class MTGScanner {
         };
       } else if (response.status === 404) {
         console.log('Card not found with exact lookup, trying fallback search');
-        // Fallback to fuzzy search if exact lookup fails  
+        // Fallback to fuzzy search if exact lookup fails
         return await this.searchCardFallback(collectorInfo, language);
       }
     } catch (error) {
@@ -957,13 +958,13 @@ class MTGScanner {
   mapLanguageCode(ocrLanguageCode) {
     const languageMap = {
       'EN': 'en',
-      'DE': 'de', 
+      'DE': 'de',
       'FR': 'fr',
       'ES': 'es',
       'IT': 'it',
       'PT': 'pt',
       'JP': 'ja',
-      'KO': 'ko', 
+      'KO': 'ko',
       'RU': 'ru',
       'ZH': 'zhs' // Simplified Chinese for Scryfall
     };
@@ -974,13 +975,13 @@ class MTGScanner {
   getLanguageDisplayName(languageCode) {
     const displayNames = {
       'EN': 'English',
-      'DE': 'German', 
+      'DE': 'German',
       'FR': 'French',
       'ES': 'Spanish',
       'IT': 'Italian',
       'PT': 'Portuguese',
       'JP': 'Japanese',
-      'KO': 'Korean', 
+      'KO': 'Korean',
       'RU': 'Russian',
       'ZH': 'Chinese'
     };
@@ -1031,7 +1032,7 @@ class MTGScanner {
     // Set modal content
     this.modalCardName.textContent = cardData.name;
     this.modalCardSet.textContent = cardData.set;
-    
+
     // Display language information
     if (cardData.languageDisplay) {
       this.modalLanguageText.textContent = cardData.languageDisplay;
