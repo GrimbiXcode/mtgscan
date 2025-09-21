@@ -125,3 +125,6 @@ playwright-report/
 
 # Tesseract training data
 *.traineddata
+
+# local deploy file
+deploy.sh
