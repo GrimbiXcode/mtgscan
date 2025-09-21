@@ -70,8 +70,13 @@ Don't have a card handy? Use "📁 Bild hochladen" to test with existing card ph
 mtgscan/
 ├── index.html          # Main HTML structure
 ├── src/
-│   ├── main.js         # Application logic (MTGScanner class)
-│   └── style.css       # Clean, responsive styling
+│   └── main.js         # Application logic (MTGScanner class)
+├── public/
+│   ├── style.css       # Clean, responsive styling
+│   ├── privacy.html    # Privacy policy (German)
+│   ├── terms.html      # Terms of use (German)
+│   ├── imprint.html    # Legal imprint (German)
+│   └── legal-en.html   # Legal summary (English)
 ├── assets/
 │   └── default-card.png # Placeholder card image
 ├── package.json        # Vite dev server config
@@ -84,6 +89,12 @@ mtgscan/
 - **Event-Driven Flow**: Clear separation of concerns
 - **Progressive Enhancement**: Works without JavaScript for basic HTML
 - **Mobile-First**: Responsive design optimized for phones and tablets
+
+### File Organization Notes
+
+- **CSS in public/**: `style.css` is in the `public/` directory to ensure both the main app and static legal pages can reference it correctly in production builds
+- **Static Legal Pages**: Privacy policy, terms, and imprint are static HTML files that don't require build processing
+- **Vite Build Handling**: The main app's CSS gets bundled and optimized, while public files are copied as-is
 
 ## 🔧 Technical Details
 
@@ -193,6 +204,12 @@ npm run build
 
 # Deploy dist/ folder to your hosting service
 ```
+
+**Build Output Structure:**
+- `index.html` - Main app with bundled and optimized CSS/JS
+- `style.css` - Shared stylesheet for legal pages (copied from public/)
+- `privacy.html`, `terms.html`, `imprint.html`, `legal-en.html` - Static legal pages
+- `assets/` - Optimized and hashed assets (images, bundled code)
 
 ## 🤝 Contributing
 
