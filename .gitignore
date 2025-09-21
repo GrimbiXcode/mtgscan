@@ -118,7 +118,7 @@ playwright-report/
 # *.csv
 
 # archive files that are generated for the image export
-.gz
+*.gz
 
 # SSL certificates
 *.pem
