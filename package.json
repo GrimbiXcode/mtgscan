@@ -21,8 +21,8 @@
     "scryfall",
     "moxfield"
   ],
-  "author": "",
-  "license": "MIT",
+  "author": "David Grimbichler (grimbixcode)",
+  "license": "GNU GPLv3",
   "devDependencies": {
     "canvas": "^3.2.0",
     "fuzzyset": "^1.0.7",
