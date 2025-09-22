@@ -399,6 +399,79 @@ header h1 {
     font-size: 0.8rem;
 }
 
+/* Quantity controls in collection */
+.card-quantity-section {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+    padding: 0.5rem;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border: 1px solid #e9ecef;
+}
+
+.quantity-label {
+    font-size: 0.9rem;
+    color: #495057;
+    font-weight: 600;
+}
+
+.quantity-controls-inline {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.quantity-btn-small {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 50%;
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.quantity-btn-small.increase {
+    background: #28a745;
+    color: white;
+}
+
+.quantity-btn-small.increase:hover {
+    background: #218838;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.quantity-btn-small.decrease {
+    background: #dc3545;
+    color: white;
+}
+
+.quantity-btn-small.decrease:hover {
+    background: #c82333;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.quantity-display-inline {
+    font-size: 1rem;
+    font-weight: bold;
+    color: #495057;
+    min-width: 30px;
+    text-align: center;
+    padding: 0.25rem 0.5rem;
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
     .app {

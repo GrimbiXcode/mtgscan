@@ -1376,7 +1376,14 @@ class MTGScanner {
                     <h5>${card.name} ${foilIndicator}</h5>
                     <p>${card.set}</p>
                     ${languageDisplay}
-                    <p>Anzahl: ${card.count || 1}</p>
+                    <div class="card-quantity-section">
+                        <span class="quantity-label">Anzahl:</span>
+                        <div class="quantity-controls-inline">
+                            <button class="quantity-btn-small decrease" onclick="mtgScanner.decreaseCardQuantityInCollection('${card.id}')" aria-label="Anzahl verringern">−</button>
+                            <span class="quantity-display-inline">${card.count || 1}</span>
+                            <button class="quantity-btn-small increase" onclick="mtgScanner.increaseCardQuantityInCollection('${card.id}')" aria-label="Anzahl erhöhen">+</button>
+                        </div>
+                    </div>
                     <div class="card-item-actions">
                         <button class="btn danger" onclick="mtgScanner.removeCard('${card.id}')">🗑️</button>
                     </div>
@@ -1410,6 +1417,36 @@ class MTGScanner {
     this.saveCollection();
     this.updateCardCount();
     this.renderCollection();
+  }
+
+  // Increase card quantity directly from collection
+  increaseCardQuantityInCollection(cardId) {
+    const card = this.cards.find(c => c.id === cardId);
+    if (card) {
+      card.count = (card.count || 1) + 1;
+      this.saveCollection();
+      this.updateCardCount();
+      this.renderCollection();
+      this.showSuccess(`Anzahl von "${card.name}" erhöht auf ${card.count}.`);
+    }
+  }
+
+  // Decrease card quantity directly from collection
+  decreaseCardQuantityInCollection(cardId) {
+    const card = this.cards.find(c => c.id === cardId);
+    if (card) {
+      if (card.count <= 1) {
+        // Remove card entirely if count would be 0
+        this.cards = this.cards.filter(c => c.id !== cardId);
+        this.showWarning(`"${card.name}" wurde aus der Sammlung entfernt.`);
+      } else {
+        card.count -= 1;
+        this.showInfo(`Anzahl von "${card.name}" verringert auf ${card.count}.`);
+      }
+      this.saveCollection();
+      this.updateCardCount();
+      this.renderCollection();
+    }
   }
 
   saveCollection() {
