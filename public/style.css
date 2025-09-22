@@ -313,45 +313,26 @@ header h1 {
     transition: width 0.3s ease;
 }
 
-/* Results Section */
-.results-section {
+/* Debug Section */
+.debug-section {
     background: white;
     padding: 2rem;
     border-radius: 8px;
     margin-bottom: 2rem;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border: 2px dashed #95a5a6;
 }
 
-.result-card {
-    display: flex;
-    gap: 2rem;
-    align-items: center;
-}
-
-#resultImage {
-    width: 150px;
-    height: auto;
-    border-radius: 8px;
-}
-
-.result-info {
-    flex: 1;
-}
-
-.result-info h4 {
-    font-size: 1.5rem;
-    color: #2c3e50;
-    margin-bottom: 0.5rem;
-}
-
-.result-info p {
+.debug-section h3 {
     color: #7f8c8d;
+    font-size: 1.2rem;
     margin-bottom: 1rem;
 }
 
-.result-actions {
-    display: flex;
-    gap: 1rem;
+.debug-section .debug-images {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
 }
 
 /* Collection Section */
@@ -1007,6 +988,13 @@ header h1 {
 .github-link:hover {
     color: #2980b9;
     text-decoration: underline;
+}
+
+.footer-actions {
+    margin: 1rem 0;
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
 }
 
 .footer-subtitle {
