@@ -39,6 +39,27 @@ header h1 {
     color: #2c3e50;
 }
 
+/* Disclaimer styling */
+.disclaimer {
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 6px;
+    text-align: center;
+}
+
+.disclaimer-text {
+    margin: 0;
+    font-size: 0.9rem;
+    color: #856404;
+    line-height: 1.4;
+}
+
+.disclaimer-text strong {
+    color: #6c5502;
+}
+
 /* Buttons */
 .btn {
     padding: 0.75rem 1.5rem;
@@ -995,6 +1016,17 @@ header h1 {
     margin: 0;
 }
 
+.footer-disclaimer {
+    font-size: 0.8rem;
+    color: #856404;
+    background: #fff3cd;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    margin: 0.75rem 0;
+    border: 1px solid #ffeaa7;
+    line-height: 1.4;
+}
+
 .footer-legal {
     margin-top: 0.5rem;
     font-size: 0.85rem;
@@ -1039,6 +1071,21 @@ header h1 {
     .footer-legal {
         flex-direction: column;
         gap: 0.25rem;
+    }
+    
+    .disclaimer {
+        margin-top: 0.75rem;
+        padding: 0.5rem 0.75rem;
+    }
+    
+    .disclaimer-text {
+        font-size: 0.8rem;
+    }
+    
+    .footer-disclaimer {
+        font-size: 0.75rem;
+        padding: 0.4rem 0.75rem;
+        margin: 0.5rem 0;
     }
 }
 
