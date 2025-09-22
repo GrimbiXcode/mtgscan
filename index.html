@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MTG Scanner - Simple Version</title>
-    <link rel="stylesheet" href="public/style.css">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="app">
@@ -62,6 +62,23 @@
                 </div>
             </section>
 
+            <!-- Debug Section (hidden by default, toggled from footer) -->
+            <section id="debugSection" class="debug-section" hidden>
+                <h3>🔧 Debug-Tools</h3>
+                <div class="debug-images">
+                    <div class="debug-buttons">
+                        <button onclick="mtgScanner.showCapturedImage()" class="btn small">📷 Original</button>
+                        <button onclick="mtgScanner.showCardImage()" class="btn small">🎴 Card</button>
+                        <button onclick="mtgScanner.showCollectorImage()" class="btn small">🔢 Collector</button>
+                    </div>
+                    <div class="debug-image-display" id="debugImageDisplay" hidden>
+                        <h6 id="debugImageTitle">Debug Image</h6>
+                        <img id="debugImage" alt="Debug Image" src="">
+                        <button onclick="mtgScanner.hideDebugImage()" class="btn small">✕ Close</button>
+                    </div>
+                </div>
+            </section>
+
             <!-- Processing Section -->
             <section id="processingSection" class="processing-section" hidden>
                 <h3>🔍 Verarbeitung...</h3>
@@ -69,36 +86,6 @@
                     <div class="progress-bar" id="progressBar"></div>
                 </div>
                 <div id="statusText">Bild wird verarbeitet...</div>
-            </section>
-
-            <!-- Results Section -->
-            <section id="resultsSection" class="results-section">
-                <h3>📋 Erkannte Karte</h3>
-                <div class="result-card">
-                    <img id="resultImage" alt="Card" src="assets/default-card.png">
-                    <div class="result-info">
-                        <h4 id="resultName">-</h4>
-                        <p id="resultSet">-</p>
-                        <p id="resultDetails" class="debug-text"></p>
-                        <div class="result-actions">
-                            <button id="addCard" class="btn success">➕ Hinzufügen</button>
-                            <button id="retryOcr" class="btn">🔄 Erneut scannen</button>
-                        </div>
-                        <div class="debug-images">
-                            <h5>🔧 Debug Images:</h5>
-                            <div class="debug-buttons">
-                                <button onclick="mtgScanner.showCapturedImage()" class="btn small">📷 Original</button>
-                                <button onclick="mtgScanner.showCardImage()" class="btn small">🎴 Card</button>
-                                <button onclick="mtgScanner.showCollectorImage()" class="btn small">🔢 Collector</button>
-                            </div>
-                            <div class="debug-image-display" id="debugImageDisplay" hidden>
-                                <h6 id="debugImageTitle">Debug Image</h6>
-                                <img id="debugImage" alt="Debug Image" src="">
-                                <button onclick="mtgScanner.hideDebugImage()" class="btn small">✕ Close</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </section>
 
             <!-- Collection Section -->
@@ -120,6 +107,9 @@
                         📂 View on GitHub
                     </a>
                 </p>
+                <div class="footer-actions">
+                    <button id="toggleDebug" class="btn small">🛠️ Debug ein-/ausblenden</button>
+                </div>
                 <p class="footer-subtitle">Simple • Focused • Language Independent</p>
                 <p class="footer-disclaimer">
                     ⚠️ Inoffizielles Fan-Projekt • Keine Verbindung zu Wizards of the Coast, Magic: The Gathering oder Hasbro • Alle Kartendaten von Scryfall API

@@ -33,15 +33,12 @@ class MTGScanner {
     this.frameSizeControls = document.getElementById('frameSizeControls');
 
     this.processingSection = document.getElementById('processingSection');
-    this.resultsSection = document.getElementById('resultsSection');
     this.progressBar = document.getElementById('progressBar');
     this.statusText = document.getElementById('statusText');
 
-    this.resultImage = document.getElementById('resultImage');
-    this.resultName = document.getElementById('resultName');
-    this.resultSet = document.getElementById('resultSet');
-    this.addCardBtn = document.getElementById('addCard');
-    this.retryOcrBtn = document.getElementById('retryOcr');
+    // Debug section toggle
+    this.debugSection = document.getElementById('debugSection');
+    this.toggleDebugBtn = document.getElementById('toggleDebug');
 
     this.cardCount = document.getElementById('cardCount');
     this.cardList = document.getElementById('cardList');
@@ -81,8 +78,10 @@ class MTGScanner {
     this.uploadCardBtn.addEventListener('click', () => this.triggerFileUpload());
     this.fileInput.addEventListener('change', (e) => this.handleFileUpload(e));
 
-    this.addCardBtn.addEventListener('click', () => this.addCardToCollection());
-    this.retryOcrBtn.addEventListener('click', () => this.retryOcr());
+    // Debug toggle
+    if (this.toggleDebugBtn) {
+      this.toggleDebugBtn.addEventListener('click', () => this.toggleDebugSection());
+    }
 
     this.exportCollectionBtn.addEventListener('click', () => this.exportCollection());
     this.clearCollectionBtn.addEventListener('click', () => this.clearCollection());
@@ -1136,10 +1135,20 @@ class MTGScanner {
     return null; // For now, just return null
   }
 
+  toggleDebugSection() {
+    if (!this.debugSection) return;
+    const isHidden = this.debugSection.hasAttribute('hidden');
+    if (isHidden) {
+      this.debugSection.removeAttribute('hidden');
+      this.showInfo('Debug-Bereich aktiviert', 2500);
+    } else {
+      this.debugSection.setAttribute('hidden', '');
+      this.showInfo('Debug-Bereich deaktiviert', 2500);
+    }
+  }
 
   showProcessing(show) {
     this.processingSection.style.display = show ? 'block' : 'none';
-    //this.resultsSection.style.display = 'none';
 
     if (show) {
       this.progressBar.style.width = '0%';
@@ -1341,38 +1350,6 @@ class MTGScanner {
     this.renderCollection();
     this.updateModalQuantityDisplay(this.currentCard);
   }
-
-  addCardToCollection() {
-    if (this.currentCard) {
-      const existingCard = this.cards.find(c => c.id === this.currentCard.id);
-
-      if (existingCard) {
-        existingCard.count = (existingCard.count || 1) + 1;
-      } else {
-        this.cards.push({
-          ...this.currentCard,
-          count: 1,
-          addedAt: new Date().toISOString(),
-          // Ensure language and foil fields are preserved
-          language: this.currentCard.language || 'EN',
-          languageDisplay: this.currentCard.languageDisplay || 'English',
-          isFoil: this.currentCard.isFoil || false
-        });
-      }
-
-      this.saveCollection();
-      this.updateCardCount();
-      this.renderCollection();
-
-      this.showSuccess(`"${this.currentCard.name}" wurde zur Sammlung hinzugefügt!`);
-    }
-  }
-
-  retryOcr() {
-    this.captureCard();
-  }
-
-
 
   updateCardCount() {
     // Calculate total cards including quantities
