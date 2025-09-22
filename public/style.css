@@ -1203,3 +1203,279 @@ header h1 {
         margin: 0 auto;
     }
 }
+
+/* Foil Card Modal Effects */
+.modal-content.foil {
+    position: relative;
+    background: linear-gradient(
+        45deg,
+        #ffffff 0%,
+        #f8f9ff 15%,
+        #fff0f5 30%,
+        #f0fff0 45%,
+        #fff8dc 60%,
+        #f0f8ff 75%,
+        #fdf5e6 90%,
+        #ffffff 100%
+    );
+    background-size: 400% 400%;
+    animation: foil-shimmer 8s ease-in-out infinite;
+}
+
+/* Remove the sweep effect to maintain scrollability */
+
+.modal-content.foil .modal-header,
+.modal-content.foil .modal-body,
+.modal-content.foil .modal-footer {
+    position: relative;
+    z-index: 2;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(1px);
+}
+
+.modal-content.foil .modal-header {
+    background: rgba(248, 249, 250, 0.95);
+    border-bottom: 1px solid rgba(233, 236, 239, 0.8);
+}
+
+.modal-content.foil .modal-footer {
+    background: rgba(248, 249, 250, 0.95);
+    border-top: 1px solid rgba(233, 236, 239, 0.8);
+}
+
+.modal-content.foil .modal-card-image {
+    box-shadow: 
+        0 2px 8px rgba(0, 0, 0, 0.15),
+        0 0 20px rgba(255, 215, 0, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    border: 1px solid rgba(255, 215, 0, 0.3);
+}
+
+/* Foil animation keyframes */
+@keyframes foil-shimmer {
+    0% {
+        background-position: 0% 50%;
+    }
+    25% {
+        background-position: 100% 25%;
+    }
+    50% {
+        background-position: 100% 75%;
+    }
+    75% {
+        background-position: 0% 100%;
+    }
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+/* foil-sweep animation removed to preserve modal scrollability */
+
+/* Foil text effects */
+.modal-content.foil .modal-header h3 {
+    background: linear-gradient(
+        45deg,
+        #2c3e50 0%,
+        #3498db 25%,
+        #9b59b6 50%,
+        #e74c3c 75%,
+        #2c3e50 100%
+    );
+    background-size: 200% 200%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: foil-text-shine 4s ease-in-out infinite;
+    font-weight: 700;
+}
+
+@keyframes foil-text-shine {
+    0% {
+        background-position: 0% 50%;
+    }
+    50% {
+        background-position: 100% 50%;
+    }
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+/* Foil indicator badge */
+.foil-indicator {
+    display: inline-block;
+    background: linear-gradient(
+        45deg,
+        #ffd700 0%,
+        #ffb347 25%,
+        #ff69b4 50%,
+        #87ceeb 75%,
+        #ffd700 100%
+    );
+    background-size: 200% 200%;
+    color: #2c3e50;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: bold;
+    margin-left: 0.5rem;
+    animation: foil-indicator-shine 3s ease-in-out infinite;
+    box-shadow: 
+        0 2px 4px rgba(0, 0, 0, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    border: 1px solid rgba(255, 215, 0, 0.4);
+}
+
+@keyframes foil-indicator-shine {
+    0% {
+        background-position: 0% 50%;
+    }
+    50% {
+        background-position: 100% 50%;
+    }
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    .modal-content.foil,
+    .modal-content.foil .modal-header h3,
+    .foil-indicator {
+        animation: none;
+    }
+    
+    .modal-content.foil {
+        background: linear-gradient(
+            135deg,
+            #f8f9ff 0%,
+            #fff0f5 50%,
+            #f0fff0 100%
+        );
+    }
+}
+
+/* Foil Toggle Button */
+.foil-toggle-section {
+    margin: 1rem 0;
+    text-align: center;
+}
+
+.foil-toggle-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 2px solid #dee2e6;
+    border-radius: 8px;
+    background: white;
+    color: #495057;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.foil-toggle-btn:hover {
+    border-color: #3498db;
+    color: #3498db;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.foil-toggle-btn:active {
+    transform: translateY(0);
+}
+
+.foil-toggle-btn.foil {
+    background: linear-gradient(
+        45deg,
+        #ffd700 0%,
+        #ffb347 25%,
+        #ff69b4 50%,
+        #87ceeb 75%,
+        #ffd700 100%
+    );
+    background-size: 200% 200%;
+    color: #2c3e50;
+    border-color: #ffd700;
+    animation: foil-button-shine 3s ease-in-out infinite;
+    box-shadow: 
+        0 2px 8px rgba(255, 215, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.foil-toggle-btn.foil:hover {
+    border-color: #ffb347;
+    transform: translateY(-2px);
+    box-shadow: 
+        0 6px 12px rgba(255, 215, 0, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.foil-toggle-icon {
+    font-size: 1.2rem;
+    transition: transform 0.3s ease;
+}
+
+.foil-toggle-btn:hover .foil-toggle-icon {
+    transform: scale(1.2) rotate(15deg);
+}
+
+.foil-toggle-btn.foil .foil-toggle-icon {
+    animation: foil-icon-sparkle 2s ease-in-out infinite;
+}
+
+@keyframes foil-button-shine {
+    0% {
+        background-position: 0% 50%;
+    }
+    50% {
+        background-position: 100% 50%;
+    }
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+@keyframes foil-icon-sparkle {
+    0%, 100% {
+        transform: scale(1) rotate(0deg);
+        opacity: 1;
+    }
+    25% {
+        transform: scale(1.2) rotate(10deg);
+        opacity: 0.8;
+    }
+    50% {
+        transform: scale(1.1) rotate(-5deg);
+        opacity: 1;
+    }
+    75% {
+        transform: scale(1.3) rotate(15deg);
+        opacity: 0.9;
+    }
+}
+
+/* Reduced motion for toggle button */
+@media (prefers-reduced-motion: reduce) {
+    .foil-toggle-btn.foil,
+    .foil-toggle-btn.foil .foil-toggle-icon {
+        animation: none;
+    }
+    
+    .foil-toggle-btn.foil {
+        background: linear-gradient(
+            135deg,
+            #ffd700 0%,
+            #ffb347 50%,
+            #ff69b4 100%
+        );
+    }
+}

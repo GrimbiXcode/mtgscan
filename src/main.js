@@ -67,6 +67,10 @@ class MTGScanner {
     this.decreaseQuantityBtn = document.getElementById('decreaseQuantity');
     this.modalCloseBtn = document.getElementById('modalCloseBtn');
     this.backToScannerBtn = document.getElementById('backToScannerBtn');
+    
+    // Foil toggle elements
+    this.foilToggleBtn = document.getElementById('foilToggleBtn');
+    this.foilToggleText = document.getElementById('foilToggleText');
   }
 
   initEventListeners() {
@@ -91,6 +95,7 @@ class MTGScanner {
     this.decreaseQuantityBtn.addEventListener('click', () => this.decreaseCardQuantity());
     this.modalCloseBtn.addEventListener('click', () => this.hideCardModal());
     this.backToScannerBtn.addEventListener('click', () => this.hideCardModal());
+    this.foilToggleBtn.addEventListener('click', () => this.toggleFoilStatus());
 
     // Close modal when clicking overlay
     this.cardModal.addEventListener('click', (e) => {
@@ -591,26 +596,146 @@ class MTGScanner {
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imageData.data;
 
-    // High contrast inversion processing (optimal approach from testing)
+    // Analyze image characteristics to detect foil cards
+    const imageStats = this.analyzeImageCharacteristics(data);
+    const isFoil = this.detectFoilCard(imageStats);
+    
+    console.log('Image analysis:', imageStats);
+    console.log('Foil detected:', isFoil);
+
+    if (isFoil) {
+      // Enhanced processing for foil cards
+      this.processFoilCollectorNumber(data, imageStats);
+      console.log('Applied foil-optimized collector number processing');
+    } else {
+      // Standard processing for normal cards
+      this.processNormalCollectorNumber(data);
+      console.log('Applied standard collector number processing');
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  // Analyze image characteristics to help detect foil cards
+  analyzeImageCharacteristics(data) {
+    let totalBrightness = 0;
+    let colorVariance = 0;
+    let edgeIntensity = 0;
+    let pixelCount = data.length / 4;
+    
+    // Color distribution analysis
+    let brightPixels = 0;
+    let darkPixels = 0;
+    let midtonePixels = 0;
+    
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      
+      // Calculate grayscale value
+      const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+      totalBrightness += gray;
+      
+      // Classify pixels by brightness
+      if (gray > 180) brightPixels++;
+      else if (gray < 75) darkPixels++;
+      else midtonePixels++;
+      
+      // Calculate color variance (measure of chromatic content)
+      const avgRGB = (r + g + b) / 3;
+      colorVariance += Math.abs(r - avgRGB) + Math.abs(g - avgRGB) + Math.abs(b - avgRGB);
+    }
+    
+    return {
+      averageBrightness: totalBrightness / pixelCount,
+      colorVariance: colorVariance / pixelCount,
+      brightPixelRatio: brightPixels / pixelCount,
+      darkPixelRatio: darkPixels / pixelCount,
+      midtonePixelRatio: midtonePixels / pixelCount
+    };
+  }
+
+  // Detect if this is likely a foil card based on image characteristics
+  detectFoilCard(stats) {
+    // Foil cards typically have:
+    // 1. Higher color variance due to rainbow shimmer
+    // 2. More midtone pixels (less pure black/white contrast)
+    // 3. Higher average brightness in some areas
+    
+    const foilIndicators = {
+      highColorVariance: stats.colorVariance > 15, // Threshold may need tuning
+      highMidtoneRatio: stats.midtonePixelRatio > 0.4,
+      lowerContrast: stats.darkPixelRatio < 0.3 && stats.brightPixelRatio < 0.3
+    };
+    
+    // Consider it foil if at least 2 indicators are present
+    const foilScore = Object.values(foilIndicators).filter(Boolean).length;
+    return foilScore >= 2;
+  }
+
+  // Enhanced processing specifically for foil cards
+  processFoilCollectorNumber(data, stats) {
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      
+      // Convert to grayscale
+      const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+      
+      // Adaptive thresholding for foil cards
+      // Use dynamic threshold based on local characteristics
+      let threshold = 128; // Base threshold
+      
+      // Adjust threshold based on image characteristics
+      if (stats.averageBrightness > 140) {
+        threshold = 160; // Higher threshold for bright foils
+      } else if (stats.averageBrightness < 100) {
+        threshold = 100; // Lower threshold for dark foils
+      }
+      
+      // Apply sigmoid function for smoother transitions
+      const sigmoid = 1 / (1 + Math.exp(-0.1 * (gray - threshold)));
+      
+      // Enhanced contrast stretching specifically for foils
+      let enhanced;
+      if (gray > threshold) {
+        // Bright regions: push towards white more aggressively
+        enhanced = 128 + (gray - threshold) * (127 / (255 - threshold)) * 1.8;
+      } else {
+        // Dark regions: push towards black more aggressively
+        enhanced = (gray / threshold) * 128 * 0.6;
+      }
+      
+      // Clamp values
+      enhanced = Math.max(0, Math.min(255, enhanced));
+      
+      // Invert for OCR (black text on white background)
+      const inverted = 255 - enhanced;
+      
+      data[i] = inverted;
+      data[i + 1] = inverted;
+      data[i + 2] = inverted;
+    }
+  }
+
+  // Standard processing for normal (non-foil) cards
+  processNormalCollectorNumber(data) {
     for (let i = 0; i < data.length; i += 4) {
       // Convert to grayscale
       const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
 
-      // High contrast enhancement (2.5x factor for better text separation)
+      // Standard high contrast enhancement (2.5x factor)
       const enhanced = Math.max(0, Math.min(255, (gray - 128) * 2.5 + 128));
 
       // Invert colors: Tesseract works better with black text on white background
-      // Most MTG collector numbers are white text on dark background
       const inverted = 255 - enhanced;
 
-      data[i] = inverted;     // Red
-      data[i + 1] = inverted; // Green
-      data[i + 2] = inverted; // Blue
-      // Alpha stays the same
+      data[i] = inverted;
+      data[i + 1] = inverted;
+      data[i + 2] = inverted;
     }
-
-    ctx.putImageData(imageData, 0, 0);
-    console.log('Applied high contrast collector number processing with color inversion');
   }
 
 
@@ -645,6 +770,16 @@ class MTGScanner {
 
   // Fallback OCR strategy with multiple attempts
   async performCollectorNumberOCRWithFallback(collectorCanvas) {
+    // First, analyze the image and detect if it's a foil card
+    const ctx = collectorCanvas.getContext('2d');
+    const imageData = ctx.getImageData(0, 0, collectorCanvas.width, collectorCanvas.height);
+    const imageStats = this.analyzeImageCharacteristics(imageData.data);
+    const isFoil = this.detectFoilCard(imageStats);
+    
+    // Store foil detection result for later use
+    this.lastDetectedFoil = isFoil;
+    console.log('Foil card detected:', isFoil);
+    
     this.processCollectorNumberImage(collectorCanvas);
     const strategies = [
       {
@@ -837,7 +972,7 @@ class MTGScanner {
   async loadTesseract() {
     return new Promise((resolve, reject) => {
       const script = document.createElement('script');
-      script.src = 'https://unpkg.com/tesseract.js@v5.1.1/dist/tesseract.min.js';
+      script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@6/dist/tesseract.min.js';
       script.crossOrigin = 'anonymous';
       script.onload = resolve;
       script.onerror = reject;
@@ -885,7 +1020,8 @@ class MTGScanner {
           collectorNumber: card.collector_number,
           setCode: card.set.toUpperCase(),
           language: language || 'EN', // Store the original detected language code or default to EN
-          languageDisplay: this.getLanguageDisplayName(language || 'EN')
+          languageDisplay: this.getLanguageDisplayName(language || 'EN'),
+          isFoil: this.lastDetectedFoil || false // Include foil detection result
         };
       } else if (response.status === 404) {
         console.log('Card not found with exact lookup, trying fallback search');
@@ -1033,6 +1169,10 @@ class MTGScanner {
     this.modalCardName.textContent = cardData.name;
     this.modalCardSet.textContent = cardData.set;
 
+    // Initialize foil toggle button and apply effects
+    this.updateFoilToggleButton(cardData.isFoil);
+    this.applyFoilEffectToModal(cardData.isFoil);
+
     // Display language information
     if (cardData.languageDisplay) {
       this.modalLanguageText.textContent = cardData.languageDisplay;
@@ -1081,6 +1221,67 @@ class MTGScanner {
     this.cardModal.setAttribute('hidden', '');
   }
 
+  toggleFoilStatus() {
+    if (!this.currentCard) return;
+
+    // Toggle the foil status
+    this.currentCard.isFoil = !this.currentCard.isFoil;
+    
+    console.log(`Toggled foil status to: ${this.currentCard.isFoil}`);
+
+    // Update the modal UI
+    this.updateFoilToggleButton(this.currentCard.isFoil);
+    this.applyFoilEffectToModal(this.currentCard.isFoil);
+    
+    // Update the card in collection if it exists
+    const existingCard = this.cards.find(c => c.id === this.currentCard.id);
+    if (existingCard) {
+      existingCard.isFoil = this.currentCard.isFoil;
+      this.saveCollection();
+      this.renderCollection();
+      
+      const statusText = this.currentCard.isFoil ? 'Foil' : 'Normal';
+      this.showSuccess(`"${this.currentCard.name}" updated to ${statusText} version.`);
+    } else {
+      const statusText = this.currentCard.isFoil ? 'Foil' : 'Normal';
+      this.showInfo(`"${this.currentCard.name}" will be added as ${statusText} version.`);
+    }
+  }
+
+  updateFoilToggleButton(isFoil) {
+    if (isFoil) {
+      this.foilToggleBtn.classList.add('foil');
+      this.foilToggleText.textContent = 'Foil Card';
+    } else {
+      this.foilToggleBtn.classList.remove('foil');
+      this.foilToggleText.textContent = 'Normal Card';
+    }
+  }
+
+  applyFoilEffectToModal(isFoil) {
+    const modalContent = this.cardModal.querySelector('.modal-content');
+    
+    if (isFoil) {
+      modalContent.classList.add('foil');
+      
+      // Add foil indicator to card name if not already present
+      if (!this.modalCardName.querySelector('.foil-indicator')) {
+        const foilIndicator = document.createElement('span');
+        foilIndicator.className = 'foil-indicator';
+        foilIndicator.textContent = '✨ FOIL';
+        this.modalCardName.appendChild(foilIndicator);
+      }
+    } else {
+      modalContent.classList.remove('foil');
+      
+      // Remove foil indicator if present
+      const existingIndicator = this.modalCardName.querySelector('.foil-indicator');
+      if (existingIndicator) {
+        existingIndicator.remove();
+      }
+    }
+  }
+
   updateModalQuantityDisplay(cardData) {
     const quantity = this.getCardQuantity(cardData.id);
     this.currentQuantity.textContent = quantity;
@@ -1103,14 +1304,15 @@ class MTGScanner {
       existingCard.count = (existingCard.count || 1) + 1;
       this.showSuccess(`Added another copy. You now have ${existingCard.count} copies of "${this.currentCard.name}".`);
     } else {
-      this.cards.push({
-        ...this.currentCard,
-        count: 1,
-        addedAt: new Date().toISOString(),
-        // Ensure language fields are preserved
-        language: this.currentCard.language || 'EN',
-        languageDisplay: this.currentCard.languageDisplay || 'English'
-      });
+        this.cards.push({
+          ...this.currentCard,
+          count: 1,
+          addedAt: new Date().toISOString(),
+          // Ensure language and foil fields are preserved
+          language: this.currentCard.language || 'EN',
+          languageDisplay: this.currentCard.languageDisplay || 'English',
+          isFoil: this.currentCard.isFoil || false
+        });
       this.showSuccess(`"${this.currentCard.name}" wurde zur Sammlung hinzugefügt!`);
     }
 
@@ -1151,9 +1353,10 @@ class MTGScanner {
           ...this.currentCard,
           count: 1,
           addedAt: new Date().toISOString(),
-          // Ensure language fields are preserved
+          // Ensure language and foil fields are preserved
           language: this.currentCard.language || 'EN',
-          languageDisplay: this.currentCard.languageDisplay || 'English'
+          languageDisplay: this.currentCard.languageDisplay || 'English',
+          isFoil: this.currentCard.isFoil || false
         });
       }
 
@@ -1189,10 +1392,11 @@ class MTGScanner {
 
       // Create the card element structure
       const languageDisplay = card.languageDisplay ? `<p class="card-language">🌍 ${card.languageDisplay}</p>` : '';
+      const foilIndicator = card.isFoil ? `<span class="foil-indicator">✨ FOIL</span>` : '';
       cardElement.innerHTML = `
                 <img alt="${card.name}" data-loading="true">
                 <div class="card-item-info">
-                    <h5>${card.name}</h5>
+                    <h5>${card.name} ${foilIndicator}</h5>
                     <p>${card.set}</p>
                     ${languageDisplay}
                     <p>Anzahl: ${card.count || 1}</p>
@@ -1248,7 +1452,7 @@ class MTGScanner {
         `"${card.set || ''}"`,                              // Edition (set name)
         'Near Mint',                                        // Condition (default)
         card.languageDisplay || 'English',                 // Language (use detected language)
-        'No',                                              // Foil (default)
+        card.isFoil ? 'Yes' : 'No',                        // Foil (based on detection)
         card.collectorNumber || ''                          // Collector Number
       ];
       csvRows.push(row);
