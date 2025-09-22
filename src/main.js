@@ -60,6 +60,8 @@ class MTGScanner {
     this.modalCardLanguage = document.getElementById('modalCardLanguage');
     this.modalLanguageText = document.getElementById('modalLanguageText');
     this.currentQuantity = document.getElementById('currentQuantity');
+    this.previousQuantity = document.getElementById('previousQuantity');
+    this.previousQuantityInfo = document.getElementById('previousQuantityInfo');
     this.increaseQuantityBtn = document.getElementById('increaseQuantity');
     this.decreaseQuantityBtn = document.getElementById('decreaseQuantity');
     this.modalCloseBtn = document.getElementById('modalCloseBtn');
@@ -1174,6 +1176,9 @@ class MTGScanner {
 
   // Modal Management Methods
   async showCardModal(cardData, recognizedText = '') {
+    // Store the previous quantity before any changes
+    cardData.previousQuantity = this.getCardQuantity(cardData.id);
+    
     // Set modal content
     this.modalCardName.textContent = cardData.name;
     this.modalCardSet.textContent = cardData.set;
@@ -1294,6 +1299,10 @@ class MTGScanner {
   updateModalQuantityDisplay(cardData) {
     const quantity = this.getCardQuantity(cardData.id);
     this.currentQuantity.textContent = quantity;
+
+    // Show previous quantity (stored when modal was first opened)
+    const previousQuantity = cardData.previousQuantity || 0;
+    this.previousQuantity.textContent = previousQuantity;
 
     // Enable/disable decrease button based on quantity
     this.decreaseQuantityBtn.disabled = quantity === 0;

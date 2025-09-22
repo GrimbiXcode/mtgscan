@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MTG Scanner - Simple Version</title>
-    <link rel="stylesheet" href="public/style.css">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="app">
@@ -115,13 +115,13 @@
                     ⚠️ Inoffizielles Fan-Projekt • Keine Verbindung zu Wizards of the Coast, Magic: The Gathering oder Hasbro • Alle Kartendaten von Scryfall API
                 </p>
                 <div class="footer-legal">
-                    <a href="public/privacy.html" class="legal-link">🔐 Datenschutz</a>
+                    <a href="/privacy.html" class="legal-link">🔐 Datenschutz</a>
                     <span class="separator">•</span>
-                    <a href="public/terms.html" class="legal-link">📋 Nutzungsbedingungen</a>
+                    <a href="/terms.html" class="legal-link">📋 Nutzungsbedingungen</a>
                     <span class="separator">•</span>
-                    <a href="public/imprint.html" class="legal-link">📄 Impressum</a>
+                    <a href="/imprint.html" class="legal-link">📄 Impressum</a>
                     <span class="separator">•</span>
-                    <a href="public/legal-en.html" class="legal-link">🇺🇸 English</a>
+                    <a href="/legal-en.html" class="legal-link">🇺🇸 English</a>
                 </div>
             </div>
         </footer>
@@ -140,7 +140,7 @@
                     <div class="modal-card-info">
                         <p id="modalCardSet" class="modal-card-set">Set Name</p>
                         <p id="modalCardLanguage" class="modal-card-language">🌍 Language: <span id="modalLanguageText">English</span></p>
-                        
+
                         <!-- Foil Toggle Section -->
                         <div class="foil-toggle-section">
                             <button id="foilToggleBtn" class="foil-toggle-btn" aria-label="Toggle foil status">
@@ -148,9 +148,13 @@
                                 <span id="foilToggleText">Normal Card</span>
                             </button>
                         </div>
-                        
+
                         <div class="quantity-section">
                             <h4>Quantity in Collection</h4>
+                            <div id="previousQuantityInfo" class="previous-quantity-info">
+                                <span class="previous-quantity-label">Vorherige Anzahl:</span>
+                                <span id="previousQuantity" class="previous-quantity-value">0</span>
+                            </div>
                             <div class="quantity-controls">
                                 <button id="decreaseQuantity" class="quantity-btn decrease" aria-label="Decrease quantity">−</button>
                                 <span id="currentQuantity" class="quantity-display">0</span>
