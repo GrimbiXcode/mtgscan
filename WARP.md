@@ -15,13 +15,25 @@ A simplified Magic: The Gathering card scanner that focuses on core functionalit
 
 ```
 mtgscan/
-├── index.html          # Main HTML structure
+├── index.html              # Main HTML structure with modal support
 ├── src/
-│   ├── main.js         # Application logic (single class)
-│   └── style.css       # Clean, responsive styling
-├── archive/
-│   └── complex-version/ # Previous overengineered version
-└── package.json        # Vite dev server config
+│   └── main.js             # Application logic (single MTGScanner class)
+├── public/
+│   ├── style.css           # Clean, responsive styling
+│   ├── privacy.html        # Privacy policy (German)
+│   ├── terms.html          # Terms of use (German)
+│   ├── imprint.html        # Legal imprint (German)
+│   └── legal-en.html       # Legal summary (English)
+├── assets/
+│   └── default-card.png    # Placeholder card image
+├── sandbox/
+│   ├── OCR-TESTING.md      # Comprehensive testing guide
+│   ├── test-ocr.js         # OCR testing script
+│   ├── test-ocr-advanced.js # Advanced OCR analysis
+│   └── test-images/        # Test image collections
+├── Dockerfile              # Production containerization
+├── vite.config.js          # Vite config with HTTPS support
+└── package.json            # Dependencies and scripts
 ```
 
 ## Key Features
