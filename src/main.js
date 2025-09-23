@@ -11,6 +11,7 @@ class MTGScanner {
     this.initElements();
     this.initEventListeners();
     this.initFrameSize();
+    this.migrateExistingCollection();
     this.updateCardCount();
     this.renderCollection();
     this.initCollectionRecognitions();
@@ -1176,8 +1177,15 @@ class MTGScanner {
 
   // Modal Management Methods
   async showCardModal(cardData, recognizedText = '') {
-    // Store the previous quantity before any changes
-    cardData.previousQuantity = this.getCardQuantity(cardData.id);
+    // Store the previous quantities for both foil and normal versions
+    const normalVersion = { ...cardData, isFoil: false };
+    const foilVersion = { ...cardData, isFoil: true };
+    
+    cardData.previousQuantityNormal = this.getCardQuantity(normalVersion);
+    cardData.previousQuantityFoil = this.getCardQuantity(foilVersion);
+    
+    // Set the initial previous quantity based on current foil status
+    cardData.previousQuantity = cardData.isFoil ? cardData.previousQuantityFoil : cardData.previousQuantityNormal;
     
     // Set modal content
     this.modalCardName.textContent = cardData.name;
@@ -1238,27 +1246,34 @@ class MTGScanner {
   toggleFoilStatus() {
     if (!this.currentCard) return;
 
+    // Store the current foil status before toggling
+    const wasInitiallyFoil = this.currentCard.isFoil;
+    
     // Toggle the foil status
     this.currentCard.isFoil = !this.currentCard.isFoil;
     
-    console.log(`Toggled foil status to: ${this.currentCard.isFoil}`);
+    console.log(`Toggled foil status from ${wasInitiallyFoil} to: ${this.currentCard.isFoil}`);
 
     // Update the modal UI
     this.updateFoilToggleButton(this.currentCard.isFoil);
     this.applyFoilEffectToModal(this.currentCard.isFoil);
     
-    // Update the card in collection if it exists
-    const existingCard = this.cards.find(c => c.id === this.currentCard.id);
-    if (existingCard) {
-      existingCard.isFoil = this.currentCard.isFoil;
-      this.saveCollection();
-      this.renderCollection();
-      
-      const statusText = this.currentCard.isFoil ? 'Foil' : 'Normal';
-      this.showSuccess(`"${this.currentCard.name}" updated to ${statusText} version.`);
+    // Update the previous quantity based on the new foil status
+    this.currentCard.previousQuantity = this.currentCard.isFoil ? 
+      this.currentCard.previousQuantityFoil : 
+      this.currentCard.previousQuantityNormal;
+    
+    // Update the quantity display to reflect the new foil status
+    this.updateModalQuantityDisplay(this.currentCard);
+    
+    // Show info about what will happen
+    const newStatusText = this.currentCard.isFoil ? 'Foil' : 'Normal';
+    const currentQuantity = this.getCardQuantity(this.currentCard);
+    
+    if (currentQuantity > 0) {
+      this.showInfo(`Switching to ${newStatusText} version. Current quantity: ${currentQuantity}`);
     } else {
-      const statusText = this.currentCard.isFoil ? 'Foil' : 'Normal';
-      this.showInfo(`"${this.currentCard.name}" will be added as ${statusText} version.`);
+      this.showInfo(`Switched to ${newStatusText} version. Will be added as new entry.`);
     }
   }
 
@@ -1296,8 +1311,36 @@ class MTGScanner {
     }
   }
 
+  // Generate unique identifier for card including foil status
+  getUniqueCardId(card) {
+    const baseId = card.id || card.cardId;
+    if (!baseId) {
+      console.error('Card has no valid ID:', card);
+      return null;
+    }
+    const foilSuffix = card.isFoil ? '_foil' : '_normal';
+    return `${baseId}${foilSuffix}`;
+  }
+
+  // Migrate existing collection to ensure all cards have isFoil property
+  migrateExistingCollection() {
+    let migrationNeeded = false;
+    
+    this.cards.forEach(card => {
+      if (card.isFoil === undefined) {
+        card.isFoil = false; // Default existing cards to normal (non-foil)
+        migrationNeeded = true;
+      }
+    });
+    
+    if (migrationNeeded) {
+      console.log('Migrated existing collection to include foil status');
+      this.saveCollection();
+    }
+  }
+
   updateModalQuantityDisplay(cardData) {
-    const quantity = this.getCardQuantity(cardData.id);
+    const quantity = this.getCardQuantity(cardData);
     this.currentQuantity.textContent = quantity;
 
     // Show previous quantity (stored when modal was first opened)
@@ -1308,19 +1351,27 @@ class MTGScanner {
     this.decreaseQuantityBtn.disabled = quantity === 0;
   }
 
-  getCardQuantity(cardId) {
-    const existingCard = this.cards.find(c => c.id === cardId);
+  getCardQuantity(cardData) {
+    const uniqueId = this.getUniqueCardId(cardData);
+    if (!uniqueId) return 0;
+    const existingCard = this.cards.find(c => this.getUniqueCardId(c) === uniqueId);
     return existingCard ? (existingCard.count || 1) : 0;
   }
 
   increaseCardQuantity() {
     if (!this.currentCard) return;
 
-    const existingCard = this.cards.find(c => c.id === this.currentCard.id);
+    const uniqueId = this.getUniqueCardId(this.currentCard);
+    if (!uniqueId) {
+      this.showError(`Could not generate ID for card: ${this.currentCard.name}`);
+      return;
+    }
+    const existingCard = this.cards.find(c => this.getUniqueCardId(c) === uniqueId);
 
     if (existingCard) {
       existingCard.count = (existingCard.count || 1) + 1;
-      this.showSuccess(`Added another copy. You now have ${existingCard.count} copies of "${this.currentCard.name}".`);
+      const cardType = this.currentCard.isFoil ? 'foil' : 'normal';
+      this.showSuccess(`Added another copy. You now have ${existingCard.count} ${cardType} copies of "${this.currentCard.name}".`);
     } else {
         this.cards.push({
           ...this.currentCard,
@@ -1331,7 +1382,8 @@ class MTGScanner {
           languageDisplay: this.currentCard.languageDisplay || 'English',
           isFoil: this.currentCard.isFoil || false
         });
-      this.showSuccess(`"${this.currentCard.name}" wurde zur Sammlung hinzugefügt!`);
+      const cardType = this.currentCard.isFoil ? 'foil' : 'normal';
+      this.showSuccess(`"${this.currentCard.name}" (${cardType}) wurde zur Sammlung hinzugefügt!`);
     }
 
     this.saveCollection();
@@ -1343,15 +1395,22 @@ class MTGScanner {
   decreaseCardQuantity() {
     if (!this.currentCard) return;
 
-    const existingCard = this.cards.find(c => c.id === this.currentCard.id);
+    const uniqueId = this.getUniqueCardId(this.currentCard);
+    if (!uniqueId) {
+      this.showError(`Could not generate ID for card: ${this.currentCard.name}`);
+      return;
+    }
+    const existingCard = this.cards.find(c => this.getUniqueCardId(c) === uniqueId);
 
     if (!existingCard || existingCard.count <= 1) {
       // Remove the card entirely
-      this.cards = this.cards.filter(c => c.id !== this.currentCard.id);
-      this.showWarning(`"${this.currentCard.name}" wurde aus der Sammlung entfernt.`);
+      this.cards = this.cards.filter(c => this.getUniqueCardId(c) !== uniqueId);
+      const cardType = this.currentCard.isFoil ? 'foil' : 'normal';
+      this.showWarning(`"${this.currentCard.name}" (${cardType}) wurde aus der Sammlung entfernt.`);
     } else {
       existingCard.count -= 1;
-      this.showInfo(`Reduced quantity. You now have ${existingCard.count} copies of "${this.currentCard.name}".`);
+      const cardType = this.currentCard.isFoil ? 'foil' : 'normal';
+      this.showInfo(`Reduced quantity. You now have ${existingCard.count} ${cardType} copies of "${this.currentCard.name}".`);
     }
 
     this.saveCollection();
@@ -1379,6 +1438,12 @@ class MTGScanner {
       // Create the card element structure
       const languageDisplay = card.languageDisplay ? `<p class="card-language">🌍 ${card.languageDisplay}</p>` : '';
       const foilIndicator = card.isFoil ? `<span class="foil-indicator">✨ FOIL</span>` : '';
+      const uniqueCardId = this.getUniqueCardId(card);
+      
+      if (!uniqueCardId) {
+        console.error('Could not generate unique ID for card:', card);
+        continue;
+      }
       cardElement.innerHTML = `
                 <img alt="${card.name}" data-loading="true">
                 <div class="card-item-info">
@@ -1388,13 +1453,13 @@ class MTGScanner {
                     <div class="card-quantity-section">
                         <span class="quantity-label">Anzahl:</span>
                         <div class="quantity-controls-inline">
-                            <button class="quantity-btn-small decrease" onclick="mtgScanner.decreaseCardQuantityInCollection('${card.id}')" aria-label="Anzahl verringern">−</button>
+                            <button class="quantity-btn-small decrease" onclick="mtgScanner.decreaseCardQuantityInCollection('${uniqueCardId}')" aria-label="Anzahl verringern">−</button>
                             <span class="quantity-display-inline">${card.count || 1}</span>
-                            <button class="quantity-btn-small increase" onclick="mtgScanner.increaseCardQuantityInCollection('${card.id}')" aria-label="Anzahl erhöhen">+</button>
+                            <button class="quantity-btn-small increase" onclick="mtgScanner.increaseCardQuantityInCollection('${uniqueCardId}')" aria-label="Anzahl erhöhen">+</button>
                         </div>
                     </div>
                     <div class="card-item-actions">
-                        <button class="btn danger" onclick="mtgScanner.removeCard('${card.id}')">🗑️</button>
+                        <button class="btn danger" onclick="mtgScanner.removeCard('${uniqueCardId}')">🗑️</button>
                     </div>
                 </div>
             `;
@@ -1421,36 +1486,39 @@ class MTGScanner {
     }
   }
 
-  removeCard(cardId) {
-    this.cards = this.cards.filter(c => c.id !== cardId);
+  removeCard(uniqueCardId) {
+    this.cards = this.cards.filter(c => this.getUniqueCardId(c) !== uniqueCardId);
     this.saveCollection();
     this.updateCardCount();
     this.renderCollection();
   }
 
   // Increase card quantity directly from collection
-  increaseCardQuantityInCollection(cardId) {
-    const card = this.cards.find(c => c.id === cardId);
+  increaseCardQuantityInCollection(uniqueCardId) {
+    const card = this.cards.find(c => this.getUniqueCardId(c) === uniqueCardId);
     if (card) {
       card.count = (card.count || 1) + 1;
       this.saveCollection();
       this.updateCardCount();
       this.renderCollection();
-      this.showSuccess(`Anzahl von "${card.name}" erhöht auf ${card.count}.`);
+      const cardType = card.isFoil ? 'foil' : 'normal';
+      this.showSuccess(`Anzahl von "${card.name}" (${cardType}) erhöht auf ${card.count}.`);
     }
   }
 
   // Decrease card quantity directly from collection
-  decreaseCardQuantityInCollection(cardId) {
-    const card = this.cards.find(c => c.id === cardId);
+  decreaseCardQuantityInCollection(uniqueCardId) {
+    const card = this.cards.find(c => this.getUniqueCardId(c) === uniqueCardId);
     if (card) {
       if (card.count <= 1) {
         // Remove card entirely if count would be 0
-        this.cards = this.cards.filter(c => c.id !== cardId);
-        this.showWarning(`"${card.name}" wurde aus der Sammlung entfernt.`);
+        this.cards = this.cards.filter(c => this.getUniqueCardId(c) !== uniqueCardId);
+        const cardType = card.isFoil ? 'foil' : 'normal';
+        this.showWarning(`"${card.name}" (${cardType}) wurde aus der Sammlung entfernt.`);
       } else {
         card.count -= 1;
-        this.showInfo(`Anzahl von "${card.name}" verringert auf ${card.count}.`);
+        const cardType = card.isFoil ? 'foil' : 'normal';
+        this.showInfo(`Anzahl von "${card.name}" (${cardType}) verringert auf ${card.count}.`);
       }
       this.saveCollection();
       this.updateCardCount();
