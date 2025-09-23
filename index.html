@@ -90,8 +90,16 @@
 
             <!-- Collection Section -->
             <section id="collectionSection" class="collection-section">
-                <h3>📚 Meine Sammlung (<span id="cardCount">0</span>)</h3>
+                <div class="collection-header">
+                    <h3>📚 <span id="currentCollectionName">Meine Sammlung</span> (<span id="cardCount">0</span>)</h3>
+                    <div class="collection-selector">
+                        <select id="collectionSelect" class="collection-dropdown">
+                            <!-- Options will be populated dynamically -->
+                        </select>
+                    </div>
+                </div>
                 <div class="collection-controls">
+                    <button id="manageCollectionsBtn" class="btn secondary">📚 Sammlungen verwalten</button>
                     <button id="exportCollection" class="btn">💾 Exportieren</button>
                     <button id="clearCollection" class="btn danger">🗑️ Leeren</button>
                 </div>
@@ -125,6 +133,34 @@
                 </div>
             </div>
         </footer>
+    </div>
+
+    <!-- Collection Management Modal -->
+    <div id="collectionModal" class="modal-overlay" hidden>
+        <div class="modal-content collection-modal">
+            <div class="modal-header">
+                <h3>📚 Sammlungen verwalten</h3>
+                <button id="collectionModalCloseBtn" class="modal-close" aria-label="Modal schließen">✕</button>
+            </div>
+            <div class="modal-body">
+                <!-- Create New Collection -->
+                <div class="collection-create-section">
+                    <h4>➕ Neue Sammlung erstellen</h4>
+                    <div class="input-group">
+                        <input type="text" id="newCollectionName" placeholder="Name der neuen Sammlung..." maxlength="50">
+                        <button id="createCollectionBtn" class="btn primary">Erstellen</button>
+                    </div>
+                </div>
+                
+                <!-- Collections List -->
+                <div class="collections-list-section">
+                    <h4>📂 Vorhandene Sammlungen</h4>
+                    <div id="collectionsList" class="collections-list">
+                        <!-- Collections will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Card Modal -->

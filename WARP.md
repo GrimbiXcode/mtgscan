@@ -203,13 +203,79 @@ npm run dev
 - Chrome, Safari, Firefox, Edge
 - Mobile browsers on iOS/Android
 
+## Collection Management System (December 2024)
+
+### Multi-Collection Support
+The app now supports multiple collections with full CRUD operations:
+
+**Data Structure:**
+```javascript
+// Collections metadata (localStorage: 'mtg-collections-meta')
+{
+  "collections": {
+    "coll_timestamp_randomid": {
+      "id": "coll_timestamp_randomid",
+      "name": "Standard Deck",
+      "createdAt": "2024-12-23T20:00:00Z",
+      "lastModified": "2024-12-23T20:30:00Z",
+      "cardCount": 60
+    }
+  },
+  "activeCollection": "coll_timestamp_randomid"
+}
+
+// Individual collections (localStorage: 'mtg-collection-{id}')
+[...cards with existing structure...]
+```
+
+**Key Features:**
+- **Collection Management Modal**: Create, rename, delete collections
+- **Collection Selector**: Dropdown to switch between collections
+- **Metadata Tracking**: Creation date, last modified, card count
+- **Automatic Migration**: Existing collections are migrated seamlessly
+- **Responsive Design**: Mobile-friendly collection management
+
+**UI Components:**
+- Collection header with name and card count
+- Collection dropdown selector
+- "Sammlungen verwalten" button opens management modal
+- Modal shows all collections with metadata and actions
+
+**Safety Features:**
+- Cannot delete the last remaining collection
+- Confirmation dialog for collection deletion
+- Duplicate name prevention
+- Automatic switching if active collection is deleted
+
+### Migration Strategy
+```javascript
+// Old format (localStorage: 'mtg-collection')
+[...cards...]
+
+// Automatically migrates to new multi-collection system
+// Creates default collection "Meine Sammlung"
+// Preserves all existing cards and metadata
+```
+
+## Development Notes
+
+### Testing During Development
+**Important**: For testing purposes, do not start the web server with `npm run dev` - the web server should already be running during development. Only run scripts and check functionality without restarting the server.
+
+### Collection System Implementation
+1. **Initialization Order**: Collections system initializes after DOM elements are ready
+2. **Data Persistence**: Each collection stored separately in localStorage
+3. **UI Updates**: All collection switches update both dropdown and display
+4. **Error Handling**: Graceful fallbacks for missing collections or corrupted data
+
 ## Future Enhancements (If Needed)
 
 ### Potential Simple Additions
-- Card count tracking
-- Export to CSV/Excel
-- Basic statistics
-- Backup/restore from file
+- Collection export (individual or all collections)
+- Collection import/merge functionality
+- Basic collection statistics
+- Collection templates for common deck types
+- Backup/restore from file with collection preservation
 - Share collection link
 
 ### Things to Avoid
@@ -221,6 +287,7 @@ npm run dev
 - User authentication
 - Cloud sync (unless essential)
 - Reverting to name-based recognition
+- Over-complicating collection hierarchy (folders/subfolders)
 
 ## Recent Evolution: From Name-Based to Collector Number Recognition
 

@@ -5,13 +5,17 @@ class MTGScanner {
     this.canvas = document.getElementById('canvas');
     this.stream = null;
     this.isProcessing = false;
-    this.cards = JSON.parse(localStorage.getItem('mtg-collection') || '[]');
     this.collectorImages = [];
 
     this.initElements();
     this.initEventListeners();
     this.initFrameSize();
+    
+    // Initialize collections system after elements are ready
+    this.initCollections();
     this.migrateExistingCollection();
+    this.loadActiveCollection();
+    this.migrateFoilStatus(); // Migrate foil status after cards are loaded
     this.updateCardCount();
     this.renderCollection();
     this.initCollectionRecognitions();
@@ -71,6 +75,18 @@ class MTGScanner {
     // Foil toggle elements
     this.foilToggleBtn = document.getElementById('foilToggleBtn');
     this.foilToggleText = document.getElementById('foilToggleText');
+    
+    // Collection management elements
+    this.currentCollectionName = document.getElementById('currentCollectionName');
+    this.collectionSelect = document.getElementById('collectionSelect');
+    this.manageCollectionsBtn = document.getElementById('manageCollectionsBtn');
+    
+    // Collection modal elements
+    this.collectionModal = document.getElementById('collectionModal');
+    this.collectionModalCloseBtn = document.getElementById('collectionModalCloseBtn');
+    this.newCollectionName = document.getElementById('newCollectionName');
+    this.createCollectionBtn = document.getElementById('createCollectionBtn');
+    this.collectionsList = document.getElementById('collectionsList');
   }
 
   initEventListeners() {
@@ -103,6 +119,26 @@ class MTGScanner {
     this.cardModal.addEventListener('click', (e) => {
       if (e.target === this.cardModal) {
         this.hideCardModal();
+      }
+    });
+    
+    // Collection management event listeners
+    this.manageCollectionsBtn.addEventListener('click', () => this.showCollectionModal());
+    this.collectionModalCloseBtn.addEventListener('click', () => this.hideCollectionModal());
+    this.createCollectionBtn.addEventListener('click', () => this.createNewCollection());
+    this.collectionSelect.addEventListener('change', (e) => this.switchToCollection(e.target.value));
+    
+    // Enter key for creating collections
+    this.newCollectionName.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && this.newCollectionName.value.trim()) {
+        this.createNewCollection();
+      }
+    });
+    
+    // Close collection modal when clicking overlay
+    this.collectionModal.addEventListener('click', (e) => {
+      if (e.target === this.collectionModal) {
+        this.hideCollectionModal();
       }
     });
   }
@@ -1322,23 +1358,6 @@ class MTGScanner {
     return `${baseId}${foilSuffix}`;
   }
 
-  // Migrate existing collection to ensure all cards have isFoil property
-  migrateExistingCollection() {
-    let migrationNeeded = false;
-    
-    this.cards.forEach(card => {
-      if (card.isFoil === undefined) {
-        card.isFoil = false; // Default existing cards to normal (non-foil)
-        migrationNeeded = true;
-      }
-    });
-    
-    if (migrationNeeded) {
-      console.log('Migrated existing collection to include foil status');
-      this.saveCollection();
-    }
-  }
-
   updateModalQuantityDisplay(cardData) {
     const quantity = this.getCardQuantity(cardData);
     this.currentQuantity.textContent = quantity;
@@ -1526,9 +1545,6 @@ class MTGScanner {
     }
   }
 
-  saveCollection() {
-    localStorage.setItem('mtg-collection', JSON.stringify(this.cards));
-  }
 
   exportCollection() {
     // Generate Moxfield-compatible CSV format
@@ -1791,6 +1807,414 @@ class MTGScanner {
 
   showInfo(message, duration = 4000) {
     return this.showNotification(message, 'info', duration);
+  }
+  
+  // Collection Management Methods
+  
+  initCollections() {
+    // Initialize the collections system
+    const collectionsData = this.getCollectionsData();
+    
+    // If no collections exist, create default one
+    if (Object.keys(collectionsData.collections).length === 0) {
+      const defaultId = this.generateCollectionId();
+      collectionsData.collections[defaultId] = {
+        id: defaultId,
+        name: 'Meine Sammlung',
+        createdAt: new Date().toISOString(),
+        lastModified: new Date().toISOString(),
+        cardCount: 0
+      };
+      collectionsData.activeCollection = defaultId;
+      this.saveCollectionsData(collectionsData);
+    }
+    
+    this.collectionsData = collectionsData;
+    this.populateCollectionSelector();
+  }
+  
+  getCollectionsData() {
+    const stored = localStorage.getItem('mtg-collections-meta');
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch (e) {
+        console.error('Error parsing collections data:', e);
+      }
+    }
+    
+    return {
+      collections: {},
+      activeCollection: null
+    };
+  }
+  
+  saveCollectionsData(data) {
+    try {
+      localStorage.setItem('mtg-collections-meta', JSON.stringify(data));
+      this.collectionsData = data;
+    } catch (e) {
+      console.error('Error saving collections data:', e);
+      this.showError('Fehler beim Speichern der Sammlungsdaten');
+    }
+  }
+  
+  generateCollectionId() {
+    return 'coll_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+  }
+  
+  getCollectionStorageKey(collectionId) {
+    return `mtg-collection-${collectionId}`;
+  }
+  
+  loadActiveCollection() {
+    const activeId = this.collectionsData.activeCollection;
+    if (activeId && this.collectionsData.collections[activeId]) {
+      const storageKey = this.getCollectionStorageKey(activeId);
+      this.cards = JSON.parse(localStorage.getItem(storageKey) || '[]');
+      this.updateCollectionDisplay();
+    } else {
+      this.cards = [];
+    }
+  }
+  
+  populateCollectionSelector() {
+    if (!this.collectionSelect) {
+      console.warn('Collection select element not found');
+      return;
+    }
+    
+    this.collectionSelect.innerHTML = '';
+    
+    Object.values(this.collectionsData.collections).forEach(collection => {
+      const option = document.createElement('option');
+      option.value = collection.id;
+      option.textContent = collection.name;
+      
+      if (collection.id === this.collectionsData.activeCollection) {
+        option.selected = true;
+      }
+      
+      this.collectionSelect.appendChild(option);
+    });
+    
+    // Force the select to update its display
+    this.collectionSelect.value = this.collectionsData.activeCollection;
+  }
+  
+  updateCollectionDisplay() {
+    const activeCollection = this.collectionsData.collections[this.collectionsData.activeCollection];
+    if (activeCollection) {
+      this.currentCollectionName.textContent = activeCollection.name;
+    }
+  }
+  
+  switchToCollection(collectionId) {
+    if (collectionId === this.collectionsData.activeCollection) {
+      return;
+    }
+    
+    // Save current collection first
+    this.saveCollection();
+    
+    // Switch to new collection
+    this.collectionsData.activeCollection = collectionId;
+    this.saveCollectionsData(this.collectionsData);
+    
+    // Load new collection and update UI
+    this.loadActiveCollection();
+    this.populateCollectionSelector(); // Explicitly update selector
+    this.updateCardCount();
+    this.renderCollection();
+    
+    const collection = this.collectionsData.collections[collectionId];
+    this.showInfo(`Zu Sammlung "${collection.name}" gewechselt`);
+  }
+  
+  showCollectionModal() {
+    this.renderCollectionsList();
+    this.collectionModal.removeAttribute('hidden');
+    
+    // Focus on new collection input
+    setTimeout(() => {
+      this.newCollectionName.focus();
+    }, 100);
+  }
+  
+  hideCollectionModal() {
+    this.collectionModal.setAttribute('hidden', '');
+    this.newCollectionName.value = '';
+  }
+  
+  createNewCollection() {
+    const name = this.newCollectionName.value.trim();
+    if (!name) {
+      this.showWarning('Bitte geben Sie einen Namen für die Sammlung ein');
+      return;
+    }
+    
+    // Check for duplicate names
+    const existingNames = Object.values(this.collectionsData.collections)
+      .map(c => c.name.toLowerCase());
+    if (existingNames.includes(name.toLowerCase())) {
+      this.showWarning('Eine Sammlung mit diesem Namen existiert bereits');
+      return;
+    }
+    
+    const newId = this.generateCollectionId();
+    const newCollection = {
+      id: newId,
+      name: name,
+      createdAt: new Date().toISOString(),
+      lastModified: new Date().toISOString(),
+      cardCount: 0
+    };
+    
+    this.collectionsData.collections[newId] = newCollection;
+    this.saveCollectionsData(this.collectionsData);
+    
+    // Create empty collection in storage
+    const storageKey = this.getCollectionStorageKey(newId);
+    localStorage.setItem(storageKey, JSON.stringify([]));
+    
+    // Update UI
+    this.populateCollectionSelector();
+    this.renderCollectionsList();
+    
+    this.showSuccess(`Sammlung "${name}" wurde erstellt`);
+    this.newCollectionName.value = '';
+  }
+  
+  renderCollectionsList() {
+    this.collectionsList.innerHTML = '';
+    
+    const collections = Object.values(this.collectionsData.collections)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    
+    collections.forEach(collection => {
+      const isActive = collection.id === this.collectionsData.activeCollection;
+      const collectionElement = this.createCollectionListItem(collection, isActive);
+      this.collectionsList.appendChild(collectionElement);
+    });
+  }
+  
+  createCollectionListItem(collection, isActive) {
+    const div = document.createElement('div');
+    div.className = `collection-item ${isActive ? 'active' : ''}`;
+    
+    const createdDate = new Date(collection.createdAt).toLocaleDateString('de-DE');
+    const lastModifiedDate = new Date(collection.lastModified).toLocaleDateString('de-DE');
+    
+    div.innerHTML = `
+      <div class="collection-item-header">
+        <h5 class="collection-name">${this.escapeHtml(collection.name)}</h5>
+        ${isActive ? '<span class="collection-active-badge">Aktiv</span>' : ''}
+      </div>
+      <div class="collection-metadata">
+        <div class="collection-stat">
+          <span>🗓️ Erstellt:</span>
+          <span>${createdDate}</span>
+        </div>
+        <div class="collection-stat">
+          <span>📝 Bearbeitet:</span>
+          <span>${lastModifiedDate}</span>
+        </div>
+        <div class="collection-stat">
+          <span>🎴 Karten:</span>
+          <span>${collection.cardCount}</span>
+        </div>
+        <div class="collection-stat">
+          <span>🆔 ID:</span>
+          <span>${collection.id}</span>
+        </div>
+      </div>
+      <div class="collection-actions">
+        <button class="btn small secondary" onclick="mtgScanner.selectCollection('${collection.id}')">Auswählen</button>
+        <button class="btn small" onclick="mtgScanner.renameCollection('${collection.id}')">Umbenennen</button>
+        <button class="btn small danger" onclick="mtgScanner.deleteCollection('${collection.id}')">Löschen</button>
+      </div>
+    `;
+    
+    return div;
+  }
+  
+  selectCollection(collectionId) {
+    this.switchToCollection(collectionId);
+    this.hideCollectionModal();
+  }
+  
+  renameCollection(collectionId) {
+    const collection = this.collectionsData.collections[collectionId];
+    if (!collection) {
+      this.showError('Sammlung nicht gefunden');
+      return;
+    }
+    
+    const newName = prompt('Neuer Name der Sammlung:', collection.name);
+    if (!newName || newName.trim() === '') {
+      return;
+    }
+    
+    const trimmedName = newName.trim();
+    
+    // Check for duplicate names (excluding current collection)
+    const existingNames = Object.values(this.collectionsData.collections)
+      .filter(c => c.id !== collectionId)
+      .map(c => c.name.toLowerCase());
+    if (existingNames.includes(trimmedName.toLowerCase())) {
+      this.showWarning('Eine Sammlung mit diesem Namen existiert bereits');
+      return;
+    }
+    
+    collection.name = trimmedName;
+    collection.lastModified = new Date().toISOString();
+    this.saveCollectionsData(this.collectionsData);
+    
+    // Update UI
+    this.populateCollectionSelector();
+    this.updateCollectionDisplay();
+    this.renderCollectionsList();
+    
+    this.showSuccess(`Sammlung wurde umbenannt zu "${trimmedName}"`);
+  }
+  
+  deleteCollection(collectionId) {
+    const collection = this.collectionsData.collections[collectionId];
+    if (!collection) {
+      this.showError('Sammlung nicht gefunden');
+      return;
+    }
+    
+    // Prevent deletion of the last collection
+    if (Object.keys(this.collectionsData.collections).length === 1) {
+      this.showWarning('Die letzte Sammlung kann nicht gelöscht werden');
+      return;
+    }
+    
+    const confirmText = `Sind Sie sicher, dass Sie die Sammlung "${collection.name}" mit ${collection.cardCount} Karten löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.`;
+    if (!confirm(confirmText)) {
+      return;
+    }
+    
+    // Remove from collections metadata
+    delete this.collectionsData.collections[collectionId];
+    
+    // Remove collection data from localStorage
+    const storageKey = this.getCollectionStorageKey(collectionId);
+    localStorage.removeItem(storageKey);
+    
+    // If this was the active collection, switch to another one
+    if (this.collectionsData.activeCollection === collectionId) {
+      const remainingCollections = Object.keys(this.collectionsData.collections);
+      if (remainingCollections.length > 0) {
+        this.collectionsData.activeCollection = remainingCollections[0];
+      }
+    }
+    
+    this.saveCollectionsData(this.collectionsData);
+    
+    // Update UI
+    this.populateCollectionSelector();
+    this.loadActiveCollection();
+    this.updateCardCount();
+    this.renderCollection();
+    this.updateCollectionDisplay();
+    this.renderCollectionsList();
+    
+    this.showSuccess(`Sammlung "${collection.name}" wurde gelöscht`);
+  }
+  
+  // Update existing save method to work with active collection
+  saveCollection() {
+    const activeId = this.collectionsData.activeCollection;
+    if (!activeId) return;
+    
+    const storageKey = this.getCollectionStorageKey(activeId);
+    localStorage.setItem(storageKey, JSON.stringify(this.cards));
+    
+    // Update collection metadata
+    const collection = this.collectionsData.collections[activeId];
+    if (collection) {
+      collection.lastModified = new Date().toISOString();
+      collection.cardCount = this.cards.reduce((sum, card) => sum + (card.count || 1), 0);
+      this.saveCollectionsData(this.collectionsData);
+    }
+  }
+  
+  // Migrate existing single collection to multi-collection system
+  migrateExistingCollection() {
+    const oldCollection = localStorage.getItem('mtg-collection');
+    if (oldCollection && oldCollection !== '[]') {
+      try {
+        const cards = JSON.parse(oldCollection);
+        if (cards.length > 0) {
+          console.log('Migrating existing collection to new system...');
+          
+          // Find the default collection or create one
+          const collectionsData = this.getCollectionsData();
+          let defaultCollection = Object.values(collectionsData.collections)[0];
+          
+          if (!defaultCollection) {
+            const defaultId = this.generateCollectionId();
+            defaultCollection = {
+              id: defaultId,
+              name: 'Meine Sammlung',
+              createdAt: new Date().toISOString(),
+              lastModified: new Date().toISOString(),
+              cardCount: 0
+            };
+            collectionsData.collections[defaultId] = defaultCollection;
+            collectionsData.activeCollection = defaultId;
+          }
+          
+          // Migrate cards to new collection
+          const newStorageKey = this.getCollectionStorageKey(defaultCollection.id);
+          localStorage.setItem(newStorageKey, oldCollection);
+          
+          // Update collection metadata
+          defaultCollection.cardCount = cards.reduce((sum, card) => sum + (card.count || 1), 0);
+          defaultCollection.lastModified = new Date().toISOString();
+          
+          this.saveCollectionsData(collectionsData);
+          
+          // Remove old storage
+          localStorage.removeItem('mtg-collection');
+          
+          this.showSuccess('Ihre bestehende Sammlung wurde erfolgreich migriert!');
+          console.log('Collection migration completed');
+        }
+      } catch (e) {
+        console.error('Error migrating collection:', e);
+      }
+    }
+    
+  }
+  
+  // Migrate existing cards to include foil status
+  migrateFoilStatus() {
+    if (!this.cards || !Array.isArray(this.cards)) {
+      return;
+    }
+    
+    let migrationNeeded = false;
+    
+    this.cards.forEach(card => {
+      if (card.isFoil === undefined) {
+        card.isFoil = false; // Default existing cards to normal (non-foil)
+        migrationNeeded = true;
+      }
+    });
+    
+    if (migrationNeeded) {
+      console.log('Migrated existing collection to include foil status');
+      this.saveCollection();
+    }
+  }
+  
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 }
 
