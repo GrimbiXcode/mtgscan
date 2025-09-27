@@ -122,6 +122,7 @@ playwright-report/
 
 # SSL certificates
 *.pem
+*.key
 
 # Tesseract training data
 *.traineddata

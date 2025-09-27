@@ -7,10 +7,21 @@ class MTGScanner {
     this.isProcessing = false;
     this.collectorImages = [];
 
+    // Debug data for automatic detection steps
+    this.debugData = {
+      originalImage: null,
+      quadrantImage: null,
+      bottomCroppedImage: null,
+      leftCroppedImage: null,
+      textAreaImage: null,
+      finalImage: null,
+      detectionStats: null
+    };
+
     this.initElements();
     this.initEventListeners();
-    this.initFrameSize();
-    
+    // Frame size initialization removed - using automatic detection
+
     // Initialize collections system after elements are ready
     this.initCollections();
     this.migrateExistingCollection();
@@ -35,7 +46,7 @@ class MTGScanner {
     // New UI elements for improved visibility control
     this.cameraContainer = document.getElementById('cameraContainer');
     this.cameraOperationControls = document.getElementById('cameraOperationControls');
-    this.frameSizeControls = document.getElementById('frameSizeControls');
+    this.alignmentInstructions = document.getElementById('alignmentInstructions');
 
     this.processingSection = document.getElementById('processingSection');
     this.progressBar = document.getElementById('progressBar');
@@ -44,15 +55,16 @@ class MTGScanner {
     // Debug section toggle
     this.debugSection = document.getElementById('debugSection');
     this.toggleDebugBtn = document.getElementById('toggleDebug');
+    this.debugStatsContent = document.getElementById('debugStatsContent');
+    this.debugImageInfo = document.getElementById('debugImageInfo');
+    this.debugImage = document.getElementById('debugImage');
+    this.debugImageDisplay = document.getElementById('debugImageDisplay');
+    this.debugImageTitle = document.getElementById('debugImageTitle');
 
     this.cardCount = document.getElementById('cardCount');
     this.cardList = document.getElementById('cardList');
     this.exportCollectionBtn = document.getElementById('exportCollection');
     this.clearCollectionBtn = document.getElementById('clearCollection');
-
-    // Frame size controls
-    this.frameSizeSlider = document.getElementById('frameSizeSlider');
-    this.frameSizeValue = document.getElementById('frameSizeValue');
 
     // Notification system
     this.notificationContainer = document.getElementById('notificationContainer');
@@ -71,16 +83,16 @@ class MTGScanner {
     this.decreaseQuantityBtn = document.getElementById('decreaseQuantity');
     this.modalCloseBtn = document.getElementById('modalCloseBtn');
     this.backToScannerBtn = document.getElementById('backToScannerBtn');
-    
+
     // Foil toggle elements
     this.foilToggleBtn = document.getElementById('foilToggleBtn');
     this.foilToggleText = document.getElementById('foilToggleText');
-    
+
     // Collection management elements
     this.currentCollectionName = document.getElementById('currentCollectionName');
     this.collectionSelect = document.getElementById('collectionSelect');
     this.manageCollectionsBtn = document.getElementById('manageCollectionsBtn');
-    
+
     // Collection modal elements
     this.collectionModal = document.getElementById('collectionModal');
     this.collectionModalCloseBtn = document.getElementById('collectionModalCloseBtn');
@@ -105,9 +117,6 @@ class MTGScanner {
     this.exportCollectionBtn.addEventListener('click', () => this.exportCollection());
     this.clearCollectionBtn.addEventListener('click', () => this.clearCollection());
 
-    // Frame size control
-    this.frameSizeSlider.addEventListener('input', (e) => this.updateFrameSize(parseFloat(e.target.value)));
-
     // Modal event listeners
     this.increaseQuantityBtn.addEventListener('click', () => this.increaseCardQuantity());
     this.decreaseQuantityBtn.addEventListener('click', () => this.decreaseCardQuantity());
@@ -121,20 +130,20 @@ class MTGScanner {
         this.hideCardModal();
       }
     });
-    
+
     // Collection management event listeners
     this.manageCollectionsBtn.addEventListener('click', () => this.showCollectionModal());
     this.collectionModalCloseBtn.addEventListener('click', () => this.hideCollectionModal());
     this.createCollectionBtn.addEventListener('click', () => this.createNewCollection());
     this.collectionSelect.addEventListener('change', (e) => this.switchToCollection(e.target.value));
-    
+
     // Enter key for creating collections
     this.newCollectionName.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && this.newCollectionName.value.trim()) {
         this.createNewCollection();
       }
     });
-    
+
     // Close collection modal when clicking overlay
     this.collectionModal.addEventListener('click', (e) => {
       if (e.target === this.collectionModal) {
@@ -143,40 +152,7 @@ class MTGScanner {
     });
   }
 
-  initFrameSize() {
-    // Load saved frame size from localStorage or use default
-    const savedFrameSize = localStorage.getItem('mtg-scanner-frame-size');
-    const frameSize = savedFrameSize ? parseFloat(savedFrameSize) : 1.0;
-
-    this.frameSizeSlider.value = frameSize;
-    this.updateFrameSize(frameSize);
-  }
-
-  updateFrameSize(scale) {
-    // Update CSS variable for frame scale
-    document.documentElement.style.setProperty('--frame-scale', scale);
-
-    // Update the display value
-    let sizeText;
-    if (scale <= 0.7) {
-      sizeText = 'Klein';
-    } else if (scale <= 0.9) {
-      sizeText = 'Klein-Medium';
-    } else if (scale <= 1.1) {
-      sizeText = 'Medium';
-    } else if (scale <= 1.4) {
-      sizeText = 'Medium-Groß';
-    } else {
-      sizeText = 'Groß';
-    }
-
-    this.frameSizeValue.textContent = `${sizeText} (${scale.toFixed(1)}x)`;
-
-    // Save to localStorage
-    localStorage.setItem('mtg-scanner-frame-size', scale.toString());
-
-    console.log('Frame size updated:', scale);
-  }
+  // Remove frame size controls - no longer needed with automatic detection
 
   initCollectionRecognitions() {
     this.collectionRegex;
@@ -263,8 +239,8 @@ class MTGScanner {
     // Show camera container and controls when camera is running
     this.cameraContainer.removeAttribute('hidden');
     this.cameraOperationControls.removeAttribute('hidden');
-    this.frameSizeControls.removeAttribute('hidden');
-    console.log('Camera UI elements shown');
+    this.alignmentInstructions.removeAttribute('hidden');
+    console.log('Camera UI elements shown with alignment grid');
   }
 
   hideCameraUI() {
@@ -275,8 +251,8 @@ class MTGScanner {
     if (this.cameraOperationControls) {
       this.cameraOperationControls.setAttribute('hidden', '');
     }
-    if (this.frameSizeControls) {
-      this.frameSizeControls.setAttribute('hidden', '');
+    if (this.alignmentInstructions) {
+      this.alignmentInstructions.setAttribute('hidden', '');
     }
     // Hide flash button when camera is stopped
     if (this.flashToggleBtn) {
@@ -349,7 +325,7 @@ class MTGScanner {
       const canvas = await this.createCanvasFromFile(file);
 
       // Process the uploaded image using the same workflow as camera
-      await this.processUploadedImage(canvas);
+      await this.processImage(canvas);
     } catch (error) {
       this.showError('Fehler beim Verarbeiten des Bildes: ' + error.message);
     }
@@ -376,25 +352,18 @@ class MTGScanner {
     });
   }
 
-  async processUploadedImage(canvas) {
-    if (this.isProcessing) return;
-
+  async processImage(canvas) {
     try {
-      this.isProcessing = true;
-      this.showProcessing(true);
-      this.updateStatus('Hochgeladenes Bild wird verarbeitet...', 20);
 
-      // For uploaded images, we assume they are already cropped to show the card
-      // or we use the full image and try to find collector number area
-      const cardCanvas = this.smartCropUploadedImage(canvas);
+      // OCR with automatic card detection and cropping
+      this.updateStatus('Karte wird automatisch erkannt...', 50);
 
-      // Store processed images for debugging
-      this.lastCapturedImage = canvas.toDataURL();
-      this.lastCardImage = cardCanvas.toDataURL();
+      // Perform automatic card detection first
+      const processedCanvas = this.cropToCollectorNumberArea(canvas);
 
-      // OCR for collector number with fallback strategy
-      this.updateStatus('Sammlernummer wird erkannt...', 50);
-      const collectorInfo = await this.performCollectorNumberOCRWithFallback(cardCanvas);
+      // Then perform OCR on the processed canvas
+      const collectorInfo = await this.performCollectorNumberOCRWithFallback(processedCanvas);
+
 
       // Search card by collector number
       this.updateStatus('Karte wird gesucht...', 90);
@@ -403,7 +372,7 @@ class MTGScanner {
       this.updateStatus('Fertig!', 100);
 
       if (cardData) {
-        this.showResults(cardData, cardCanvas, `Sammlernummer: ${collectorInfo}`);
+        this.showResults(cardData, canvas, `Sammlernummer: ${collectorInfo}`);
         this.showSuccess(`Karte ${cardData.name} wurde gefunden.`)
       } else {
         this.showWarning(`Karte mit Sammlernummer "${collectorInfo}" wurde nicht gefunden.`);
@@ -412,75 +381,12 @@ class MTGScanner {
           name: `Unbekannte Karte (${collectorInfo})`,
           set: 'Nicht gefunden',
           image: '/assets/default-card.png'
-        }, cardCanvas, collectorInfo);
+        }, canvas, collectorInfo);
       }
-
     } catch (error) {
-      this.showError('Fehler beim Verarbeiten: ' + error.message);
-    } finally {
-      this.isProcessing = false;
-      this.showProcessing(false);
+      throw new Error('Fehler beim Verarbeiten: ' + error.message);
     }
   }
-
-  smartCropUploadedImage(canvas) {
-    // For uploaded images, we handle different scenarios:
-    // 1. Image is already a close-up of a card
-    // 2. Image contains a card among other things
-    //
-    // We use a simple heuristic: if the image has a roughly card-like aspect ratio
-    // (around 2.5:3.5 or 0.71:1), we assume it's already a card image.
-    // Otherwise, we try to crop to center assuming the card is centered.
-
-    const aspectRatio = canvas.width / canvas.height;
-    const cardAspectRatio = 0.71; // Standard MTG card ratio
-
-    // If already close to card aspect ratio (within 20% tolerance), use as-is
-    if (Math.abs(aspectRatio - cardAspectRatio) / cardAspectRatio < 0.3) {
-      console.log('Image appears to be already cropped to card, using as-is');
-      return canvas;
-    }
-
-    // Otherwise, try to crop to center with card proportions
-    console.log('Image appears to contain more than just card, cropping to center');
-    return this.cropToCardProportions(canvas);
-  }
-
-  cropToCardProportions(sourceCanvas) {
-    // Crop to center of image with card proportions
-    const cardAspectRatio = 0.71; // width/height for MTG cards
-
-    let cropWidth, cropHeight;
-
-    // Determine crop dimensions based on source aspect ratio
-    if (sourceCanvas.width / sourceCanvas.height > cardAspectRatio) {
-      // Source is wider than card ratio - crop width
-      cropHeight = sourceCanvas.height;
-      cropWidth = cropHeight * cardAspectRatio;
-    } else {
-      // Source is taller than card ratio - crop height
-      cropWidth = sourceCanvas.width;
-      cropHeight = cropWidth / cardAspectRatio;
-    }
-
-    // Center the crop
-    const cropX = (sourceCanvas.width - cropWidth) / 2;
-    const cropY = (sourceCanvas.height - cropHeight) / 2;
-
-    const canvas = document.createElement('canvas');
-    canvas.width = cropWidth;
-    canvas.height = cropHeight;
-
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(
-      sourceCanvas,
-      cropX, cropY, cropWidth, cropHeight,
-      0, 0, cropWidth, cropHeight
-    );
-
-    return canvas;
-  }
-
 
   async captureCardByCollectorNumber() {
     if (this.isProcessing) return;
@@ -490,41 +396,10 @@ class MTGScanner {
       this.showProcessing(true);
       this.updateStatus('Bild wird aufgenommen...', 20);
 
-      // Capture image from video
+      // Capture full image from video - automatic detection will handle cropping
       const canvas = this.captureFromVideo();
 
-      // Crop to card frame
-      this.updateStatus('Karte wird zugeschnitten...', 40);
-      const cardCanvas = this.cropToCardFrame(canvas);
-
-      // Store processed images for debugging
-      this.lastCapturedImage = canvas.toDataURL();
-      this.lastCardImage = cardCanvas.toDataURL();
-
-      // OCR for collector number with fallback strategy
-      this.updateStatus('Sammlernummer wird erkannt...', 50);
-      const collectorInfo = await this.performCollectorNumberOCRWithFallback(cardCanvas);
-
-
-      // Search card by collector number
-      this.updateStatus('Karte wird gesucht...', 90);
-      const cardData = await this.searchCardByCollectorNumber(collectorInfo);
-
-      this.updateStatus('Fertig!', 100);
-
-      if (cardData) {
-        this.showResults(cardData, cardCanvas, `Sammlernummer: ${collectorInfo}`);
-        this.showSuccess(`Karte ${cardData.name} wurde gefunden.`)
-      } else {
-        this.showWarning(`Karte mit Sammlernummer "${collectorInfo}" wurde nicht gefunden.`);
-        // Show results anyway for debugging
-        this.showResults({
-          name: `Unbekannte Karte (${collectorInfo})`,
-          set: 'Nicht gefunden',
-          image: '/assets/default-card.png'
-        }, cardCanvas, collectorInfo);
-      }
-
+      return this.processImage(canvas);
     } catch (error) {
       this.showError('Fehler beim Scannen: ' + error.message);
     } finally {
@@ -548,88 +423,811 @@ class MTGScanner {
     return canvas;
   }
 
-  cropToCardFrame(sourceCanvas) {
-    // Get actual video and frame border elements for precise measurements
-    const videoRect = this.video.getBoundingClientRect();
-    const frameElement = document.querySelector('.frame-border');
-    const frameRect = frameElement.getBoundingClientRect();
+  // cropToCardFrame method removed - automatic detection handles all cropping
 
-    // Calculate the position of the frame relative to the video
-    const frameX = frameRect.left - videoRect.left;
-    const frameY = frameRect.top - videoRect.top;
-    const frameWidth = frameRect.width;
-    const frameHeight = frameRect.height;
+  // Debug display methods for automatic detection steps
+  updateDebugStats() {
+    if (!this.debugStatsContent || !this.debugData.detectionStats) return;
 
-    // Calculate scaling factors from video display size to actual video resolution
-    const scaleX = sourceCanvas.width / videoRect.width;
-    const scaleY = sourceCanvas.height / videoRect.height;
+    const stats = this.debugData.detectionStats;
+    let html = '<div class="debug-stats-content">';
 
-    // Apply scaling to get actual crop coordinates in the source canvas
-    const cropX = frameX * scaleX;
-    const cropY = frameY * scaleY;
-    const cropWidth = frameWidth * scaleX;
-    const cropHeight = frameHeight * scaleY;
+    html += `<div class="debug-stat-item">`;
+    html += `<span class="debug-stat-label">Original Size:</span>`;
+    html += `<span class="debug-stat-value">${stats.originalSize.width}×${stats.originalSize.height}</span>`;
+    html += `</div>`;
 
-    // Ensure crop coordinates are within bounds
-    const safeCropX = Math.max(0, Math.min(cropX, sourceCanvas.width - cropWidth));
-    const safeCropY = Math.max(0, Math.min(cropY, sourceCanvas.height - cropHeight));
-    const safeCropWidth = Math.min(cropWidth, sourceCanvas.width - safeCropX);
-    const safeCropHeight = Math.min(cropHeight, sourceCanvas.height - safeCropY);
+    // Show OCR results if available
+    if (this.debugData.ocrResults) {
+      const ocr = this.debugData.ocrResults;
+      html += `<div class="debug-stat-item">`;
+      html += `<span class="debug-stat-label">OCR Final Result:</span>`;
+      html += `<span class="debug-stat-value">"${ocr.finalText}" (${ocr.finalScore})</span>`;
+      html += `</div>`;
 
-    console.log('Crop coordinates:', {
-      frameRect: { x: frameRect.left, y: frameRect.top, w: frameRect.width, h: frameRect.height },
-      videoRect: { x: videoRect.left, y: videoRect.top, w: videoRect.width, h: videoRect.height },
-      sourceCanvas: { w: sourceCanvas.width, h: sourceCanvas.height },
-      crop: { x: safeCropX, y: safeCropY, w: safeCropWidth, h: safeCropHeight },
-      scale: { x: scaleX, y: scaleY }
+      html += `<div class="debug-stat-item">`;
+      html += `<span class="debug-stat-label">  └─ Raw Text:</span>`;
+      html += `<span class="debug-stat-value">"${ocr.rawText}" (${ocr.rawScore})</span>`;
+      html += `</div>`;
+
+      html += `<div class="debug-stat-item">`;
+      html += `<span class="debug-stat-label">  └─ Cleaned Text:</span>`;
+      html += `<span class="debug-stat-value">"${ocr.cleanedText}" (${ocr.cleanedScore})</span>`;
+      html += `</div>`;
+
+      html += `<div class="debug-stat-item">`;
+      html += `<span class="debug-stat-label">  └─ Used Version:</span>`;
+      html += `<span class="debug-stat-value">${ocr.usedRaw ? 'Raw' : 'Cleaned'}</span>`;
+      html += `</div>`;
+    }
+
+    stats.steps.forEach(step => {
+      html += `<div class="debug-stat-item">`;
+      html += `<span class="debug-stat-label">Step ${step.step} - ${step.name}:</span>`;
+      html += `<span class="debug-stat-value">${step.status}</span>`;
+      html += `</div>`;
+
+      if (step.size) {
+        html += `<div class="debug-stat-item">`;
+        html += `<span class="debug-stat-label">  └─ Size:</span>`;
+        html += `<span class="debug-stat-value">${step.size.width}×${step.size.height}</span>`;
+        html += `</div>`;
+      }
+
+      if (step.bottomEdge !== undefined) {
+        html += `<div class="debug-stat-item">`;
+        html += `<span class="debug-stat-label">  └─ Bottom Edge:</span>`;
+        html += `<span class="debug-stat-value">${step.bottomEdge}px</span>`;
+        html += `</div>`;
+      }
+
+      if (step.leftEdge !== undefined) {
+        html += `<div class="debug-stat-item">`;
+        html += `<span class="debug-stat-label">  └─ Left Edge:</span>`;
+        html += `<span class="debug-stat-value">${step.leftEdge}px</span>`;
+        html += `</div>`;
+      }
+
+      if (step.textBounds) {
+        html += `<div class="debug-stat-item">`;
+        html += `<span class="debug-stat-label">  └─ Text Area:</span>`;
+        html += `<span class="debug-stat-value">${step.textBounds.height}px high</span>`;
+        html += `</div>`;
+
+        html += `<div class="debug-stat-item">`;
+        html += `<span class="debug-stat-label">  └─ Used enhanced:</span>`;
+        html += `<span class="debug-stat-value">${step.textBounds.usedEnhanced ? 'YES' : 'NO'}</span>`;
+        html += `</div>`;
+      }
     });
 
-    const canvas = document.createElement('canvas');
-    canvas.width = safeCropWidth;
-    canvas.height = safeCropHeight;
+    html += '</div>';
+    this.debugStatsContent.innerHTML = html;
+  }
 
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(
-      sourceCanvas,
-      safeCropX, safeCropY, safeCropWidth, safeCropHeight,
-      0, 0, safeCropWidth, safeCropHeight
-    );
+  showQuadrantImage() {
+    if (!this.debugData.quadrantImage) {
+      alert('Führen Sie zuerst einen Scan durch, um Debug-Bilder zu generieren.');
+      return;
+    }
+    this.displayDebugImage('Quadrant Crop (Schritt 1)', this.debugData.quadrantImage,
+      'Unterer linker Quadrant des ursprünglichen Bildes');
+  }
 
-    return canvas;
+  showBottomCroppedImage() {
+    if (!this.debugData.bottomCroppedImage) {
+      alert('Führen Sie zuerst einen Scan durch, um Debug-Bilder zu generieren.');
+      return;
+    }
+    this.displayDebugImage('Bottom Edge Detection (Schritt 2)', this.debugData.bottomCroppedImage,
+      'Bild nach Erkennung des unteren Kartenrandes');
+  }
+
+  showLeftCroppedImage() {
+    if (!this.debugData.leftCroppedImage) {
+      alert('Führen Sie zuerst einen Scan durch, um Debug-Bilder zu generieren.');
+      return;
+    }
+    this.displayDebugImage('Left Edge Detection (Schritt 3)', this.debugData.leftCroppedImage,
+      'Bild nach Erkennung des linken Kartenrandes');
+  }
+
+  showTextAreaImage() {
+    if (!this.debugData.textAreaImage) {
+      alert('Führen Sie zuerst einen Scan durch, um Debug-Bilder zu generieren.');
+      return;
+    }
+    this.displayDebugImage('Text Area Detection (Schritt 4)', this.debugData.textAreaImage,
+      'Bild vor der finalen Textbereich-Erkennung');
+  }
+
+  showFinalImage() {
+    if (!this.debugData.finalImage) {
+      alert('Führen Sie zuerst einen Scan durch, um Debug-Bilder zu generieren.');
+      return;
+    }
+    this.displayDebugImage('Final Result', this.debugData.finalImage,
+      'Finales Bild nach automatischer Kartenerkennung - bereit für OCR');
+  }
+
+  displayDebugImage(title, imageDataUrl, description) {
+    this.debugImageTitle.textContent = title;
+    this.debugImage.src = imageDataUrl;
+
+    // Support HTML in description for OCR results
+    if (description.includes('<')) {
+      this.debugImageInfo.innerHTML = description;
+    } else {
+      this.debugImageInfo.textContent = description;
+    }
+
+    this.debugImageDisplay.hidden = false;
+  }
+
+  hideDebugImage() {
+    this.debugImageDisplay.hidden = true;
   }
 
   cropToCollectorNumberArea(cardCanvas) {
-    // Match the CSS positioning: left: 0, top: 90%, width: 20%, height: 8%
-    const cropWidth = Math.floor(cardCanvas.width * 0.30);   // 30% width
-    const cropHeight = Math.floor(cardCanvas.height * 0.08); // 8% height
-    const startX = 0;                                        // left: 0
-    const startY = Math.floor(cardCanvas.height * 0.92);     // top: 92%
+    // Use automatic card detection as primary method
+    console.log('Using automatic card detection...');
+    const autoDetectedCanvas = this.automaticCardDetection(cardCanvas);
 
-    // Ensure we don't go outside canvas bounds
-    const safeStartY = Math.min(startY, cardCanvas.height - cropHeight);
-    const safeWidth = Math.min(cropWidth, cardCanvas.width);
-    const safeHeight = Math.min(cropHeight, cardCanvas.height - safeStartY);
+    if (autoDetectedCanvas) {
+      console.log('Automatic card detection successful');
+      return autoDetectedCanvas;
+    }
 
-    console.log('Collector number crop:', {
-      cardCanvas: { w: cardCanvas.width, h: cardCanvas.height },
-      crop: { x: startX, y: safeStartY, w: safeWidth, h: safeHeight }
-    });
-
-    const canvas = document.createElement('canvas');
-    canvas.width = safeWidth;
-    canvas.height = safeHeight;
-
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(
-      cardCanvas,
-      startX, safeStartY, safeWidth, safeHeight,
-      0, 0, safeWidth, safeHeight
-    );
-
-    return canvas;
+    // If automatic detection fails, show error to user
+    console.error('Automatic card detection failed');
+    throw new Error('Kartenerkennung fehlgeschlagen. Bitte stellen Sie sicher, dass die Karte gut ausgerichtet und gut beleuchtet ist.');
   }
 
-  processCollectorNumberImage(canvas) {
+  // Manual crop method removed - automatic detection only
+
+  // New automatic card detection algorithm
+  automaticCardDetection(sourceCanvas) {
+    const ctx = sourceCanvas.getContext('2d');
+    const imageData = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+    const data = imageData.data;
+    const width = sourceCanvas.width;
+    const height = sourceCanvas.height;
+
+    console.log('Starting automatic card detection on image:', { width, height });
+
+    // Reset debug data
+    this.debugData = {
+      originalImage: sourceCanvas.toDataURL(),
+      quadrantImage: null,
+      bottomCroppedImage: null,
+      leftCroppedImage: null,
+      textAreaImage: null,
+      finalImage: null,
+      ocrResults: null,
+      detectionStats: {
+        originalSize: { width, height },
+        steps: []
+      }
+    };
+
+    // Step 1: Crop to lower left quadrant
+    const quadrantCanvas = this.cropToLowerLeftQuadrant(sourceCanvas);
+    this.debugData.quadrantImage = quadrantCanvas.toDataURL();
+    this.debugData.detectionStats.steps.push({
+      step: 1,
+      name: 'Quadrant Crop',
+      status: 'SUCCESS',
+      size: { width: quadrantCanvas.width, height: quadrantCanvas.height }
+    });
+    console.log('Step 1 complete: Cropped to lower left quadrant');
+
+    // Step 2: Find bottom card edge using black threshold on right edge
+    const bottomEdge = this.findBottomCardEdge(quadrantCanvas);
+    if (bottomEdge === null) {
+      console.log('Step 2 failed: Could not find bottom card edge');
+      this.debugData.detectionStats.steps.push({ step: 2, name: 'Bottom Edge Detection', status: 'FAILED' });
+      return null;
+    }
+    console.log('Step 2 complete: Found bottom card edge at y =', bottomEdge);
+
+    // Crop to bottom edge
+    const bottomCroppedCanvas = this.cropToBottomEdge(quadrantCanvas, bottomEdge);
+    this.debugData.bottomCroppedImage = bottomCroppedCanvas.toDataURL();
+    this.debugData.detectionStats.steps.push({
+      step: 2,
+      name: 'Bottom Edge Detection',
+      status: 'SUCCESS',
+      bottomEdge,
+      size: { width: bottomCroppedCanvas.width, height: bottomCroppedCanvas.height }
+    });
+    console.log('Cropped to bottom edge');
+
+    // Step 3: Find left card edge using black threshold on bottom edge
+    const leftEdge = this.findLeftCardEdge(bottomCroppedCanvas);
+    if (leftEdge === null) {
+      console.log('Step 3 failed: Could not find left card edge');
+      this.debugData.detectionStats.steps.push({ step: 3, name: 'Left Edge Detection', status: 'FAILED' });
+      return null;
+    }
+    console.log('Step 3 complete: Found left card edge at x =', leftEdge);
+
+    // Crop to left edge
+    const leftCroppedCanvas = this.cropToLeftEdge(bottomCroppedCanvas, leftEdge);
+    this.debugData.leftCroppedImage = leftCroppedCanvas.toDataURL();
+
+    // Now perform foil detection on the cropped card area
+    const foilDetectionResult = this.performFoilDetection(leftCroppedCanvas);
+    this.debugData.detectionStats.steps.push({
+      step: 3,
+      name: 'Left Edge Detection',
+      status: 'SUCCESS',
+      leftEdge,
+      foilDetected: foilDetectionResult.isFoil,
+      foilStats: foilDetectionResult.stats,
+      size: { width: leftCroppedCanvas.width, height: leftCroppedCanvas.height }
+    });
+    console.log('Cropped to left edge and detected foil status:', foilDetectionResult.isFoil);
+
+    // Step 4: Find text lines using brightness analysis
+    const textBounds = this.findTextLineBounds(leftCroppedCanvas);
+    if (!textBounds) {
+      console.log('Step 4 failed: Could not find text line bounds');
+      this.debugData.detectionStats.steps.push({ step: 4, name: 'Text Line Detection', status: 'FAILED' });
+      return null;
+    }
+    console.log('Step 4 complete: Found text bounds:', textBounds);
+
+    // Create intermediate canvas showing text area before final processing
+    const textAreaCanvas = this.cropToTextArea(leftCroppedCanvas, textBounds);
+
+    // Store text area image (before processing) for debugging
+    this.debugData.textAreaImage = textAreaCanvas.toDataURL();
+
+    // Create final canvas (copy for processing)
+    const finalCanvas = this.copyCanvas(textAreaCanvas);
+
+    // Now apply image processing optimization for OCR based on foil detection
+    this.processCollectorNumberImage(finalCanvas, foilDetectionResult);
+    this.debugData.finalImage = finalCanvas.toDataURL();
+
+    this.debugData.detectionStats.steps.push({
+      step: 4,
+      name: 'Text Line Detection & OCR Optimization',
+      status: 'SUCCESS',
+      usedEnhanced: textBounds.usedEnhanced,
+      textBounds,
+      imageProcessingApplied: true,
+      size: { width: finalCanvas.width, height: finalCanvas.height }
+    });
+    console.log('Automatic detection complete: Final crop and image processing applied');
+
+    // Update debug stats display
+    this.updateDebugStats();
+
+    return finalCanvas;
+  }
+
+  // Step 1: Crop to lower left quadrant
+  cropToLowerLeftQuadrant(canvas) {
+    const quadrantWidth = Math.floor(canvas.width / 2);
+    const quadrantHeight = Math.floor(canvas.height / 2);
+    const startX = 0;
+    const startY = Math.floor(canvas.height / 2);
+
+    const quadrantCanvas = document.createElement('canvas');
+    quadrantCanvas.width = quadrantWidth;
+    quadrantCanvas.height = quadrantHeight;
+
+    const ctx = quadrantCanvas.getContext('2d');
+    ctx.drawImage(
+      canvas,
+      startX, startY, quadrantWidth, quadrantHeight,
+      0, 0, quadrantWidth, quadrantHeight
+    );
+
+    return quadrantCanvas;
+  }
+
+  // Step 2: Find bottom card edge by scanning right edge for black pixels
+  findBottomCardEdge(canvas) {
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    const width = canvas.width;
+    const height = canvas.height;
+
+    const blackThreshold = 100; // Pixels darker than this are considered "card edge"
+    const pixelSampleWidth = Math.max(3, Math.floor(width * 0.15)); // Sample 15% of width or min 3 pixels
+
+    // Start from bottom and work up along the right edge
+    for (let y = height - 1; y >= 0; y--) {
+      let blackPixelCount = 0;
+      let totalPixels = 0;
+
+      // Sample multiple pixels horizontally near the right edge
+      for (let x = width - pixelSampleWidth; x < width; x++) {
+        if (x >= 0) {
+          const pixelIndex = (y * width + x) * 4;
+          const r = data[pixelIndex];
+          const g = data[pixelIndex + 1];
+          const b = data[pixelIndex + 2];
+          const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+
+          totalPixels++;
+          if (gray < blackThreshold) {
+            blackPixelCount++;
+          }
+        }
+      }
+
+      // If majority of sampled pixels are black, this might be the card edge
+      const blackRatio = blackPixelCount / totalPixels;
+      if (blackRatio > 0.6) { // 60% of pixels must be black
+        return y;
+      }
+    }
+
+    return null; // No edge found
+  }
+
+  // Crop image from top to bottom edge
+  cropToBottomEdge(canvas, bottomEdge) {
+    const croppedHeight = bottomEdge + 1;
+    const croppedCanvas = document.createElement('canvas');
+    croppedCanvas.width = canvas.width;
+    croppedCanvas.height = croppedHeight;
+
+    const ctx = croppedCanvas.getContext('2d');
+    ctx.drawImage(
+      canvas,
+      0, 0, canvas.width, croppedHeight,
+      0, 0, canvas.width, croppedHeight
+    );
+
+    return croppedCanvas;
+  }
+
+  // Step 3: Find left card edge by scanning bottom edge for black pixels
+  findLeftCardEdge(canvas) {
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    const width = canvas.width;
+    const height = canvas.height;
+
+    const blackThreshold = 100;
+    const pixelSampleHeight = Math.max(3, Math.floor(height * 0.1)); // Sample bottom 10% or min 3 pixels
+
+    // Start from left and work right along the bottom edge
+    for (let x = 0; x < width; x++) {
+      let blackPixelCount = 0;
+      let totalPixels = 0;
+
+      // Sample multiple pixels vertically near the bottom edge
+      for (let y = height - pixelSampleHeight; y < height; y++) {
+        if (y >= 0) {
+          const pixelIndex = (y * width + x) * 4;
+          const r = data[pixelIndex];
+          const g = data[pixelIndex + 1];
+          const b = data[pixelIndex + 2];
+          const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+
+          totalPixels++;
+          if (gray < blackThreshold) {
+            blackPixelCount++;
+          }
+        }
+      }
+
+      // If majority of sampled pixels are black, this might be the card edge
+      const blackRatio = blackPixelCount / totalPixels;
+      if (blackRatio > 0.6) { // 60% of pixels must be black
+        return x;
+      }
+    }
+
+    return null; // No edge found
+  }
+
+  // Crop image from left edge to right
+  cropToLeftEdge(canvas, leftEdge) {
+    const croppedWidth = canvas.width - leftEdge;
+    const croppedCanvas = document.createElement('canvas');
+    croppedCanvas.width = croppedWidth;
+    croppedCanvas.height = canvas.height;
+
+    const ctx = croppedCanvas.getContext('2d');
+    ctx.drawImage(
+      canvas,
+      leftEdge, 0, croppedWidth, canvas.height,
+      0, 0, croppedWidth, canvas.height
+    );
+
+    return croppedCanvas;
+  }
+
+  // Step 4: Enhanced text line detection using multiple analysis methods
+  findTextLineBounds(canvas) {
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    const width = canvas.width;
+    const height = canvas.height;
+
+    console.log('Starting enhanced text line detection on image:', { width, height });
+
+    // Method 1: Brightness profile analysis
+    const brightnessProfile = this.analyzeBrightnessProfile(data, width, height);
+
+    // Method 2: Edge density analysis
+    const edgeDensityProfile = this.analyzeEdgeDensityProfile(data, width, height);
+
+    // Method 3: Text pattern detection
+    const textPatterns = this.detectTextPatterns(data, width, height);
+
+    // Combine all methods to find the most likely text boundaries
+    const textBounds = this.combineTextDetectionMethods(brightnessProfile, edgeDensityProfile, textPatterns, height);
+
+    if (textBounds) {
+      console.log('Enhanced text detection successful:', textBounds);
+      return { ...textBounds, usedEnhanced: true};
+    }
+
+    // Fallback to simpler method if enhanced detection fails
+    console.log('Enhanced detection failed, trying fallback method');
+    const fallbackTextBounds = this.fallbackTextDetection(data, width, height);
+    return { ...fallbackTextBounds, usedEnhanced: false};
+  }
+
+  // Method 1: Analyze brightness profile across horizontal lines
+  analyzeBrightnessProfile(data, width, height) {
+    let brightnessProfile = [];
+    const sampleWidth = Math.floor(width * 0.8); // Sample 80% of width from left
+
+    // Scan from bottom to top
+    for (let y = height - 1; y >= 0; y--) {
+      let totalBrightness = 0;
+      let pixelCount = 0;
+
+      // Sample across most of the width
+      for (let x = 0; x < sampleWidth; x++) {
+        const pixelIndex = (y * width + x) * 4;
+        const r = data[pixelIndex];
+        const g = data[pixelIndex + 1];
+        const b = data[pixelIndex + 2];
+        const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+
+        totalBrightness += gray;
+        pixelCount++;
+      }
+
+      const avgBrightness = totalBrightness / pixelCount;
+      brightnessProfile.push({ y, brightness: avgBrightness });
+    }
+
+    return brightnessProfile;
+  }
+
+  // Method 2: Analyze edge density to find text boundaries
+  analyzeEdgeDensityProfile(data, width, height) {
+    let edgeDensityProfile = [];
+    const sobelThreshold = 50;
+
+    // Scan from bottom to top
+    for (let y = 1; y < height - 1; y++) {
+      let edgeCount = 0;
+      let totalPixels = 0;
+
+      // Sample across width, but avoid edges
+      for (let x = 1; x < width - 1; x++) {
+        // Calculate Sobel operator for edge detection
+        const gx = this.getSobelX(data, x, y, width);
+        const gy = this.getSobelY(data, x, y, width);
+        const edgeStrength = Math.sqrt(gx * gx + gy * gy);
+
+        if (edgeStrength > sobelThreshold) {
+          edgeCount++;
+        }
+        totalPixels++;
+      }
+
+      const edgeDensity = edgeCount / totalPixels;
+      edgeDensityProfile.push({ y, edgeDensity });
+    }
+
+    return edgeDensityProfile;
+  }
+
+  // Helper function for Sobel X operator
+  getSobelX(data, x, y, width) {
+    const getPixel = (px, py) => {
+      const idx = (py * width + px) * 4;
+      return 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
+    };
+
+    return (
+      -1 * getPixel(x - 1, y - 1) + 1 * getPixel(x + 1, y - 1) +
+      -2 * getPixel(x - 1, y) + 2 * getPixel(x + 1, y) +
+      -1 * getPixel(x - 1, y + 1) + 1 * getPixel(x + 1, y + 1)
+    );
+  }
+
+  // Helper function for Sobel Y operator
+  getSobelY(data, x, y, width) {
+    const getPixel = (px, py) => {
+      const idx = (py * width + px) * 4;
+      return 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
+    };
+
+    return (
+      -1 * getPixel(x - 1, y - 1) + -2 * getPixel(x, y - 1) + -1 * getPixel(x + 1, y - 1) +
+      1 * getPixel(x - 1, y + 1) + 2 * getPixel(x, y + 1) + 1 * getPixel(x + 1, y + 1)
+    );
+  }
+
+  // Method 3: Detect text patterns by analyzing contrast and structure
+  detectTextPatterns(data, width, height) {
+    let textPatterns = [];
+    const blockSize = 8; // Analyze in 8x8 blocks
+
+    // Scan in blocks from bottom to top
+    for (let y = height - blockSize; y >= 0; y -= blockSize) {
+      let textLikelihood = 0;
+      let blockCount = 0;
+
+      // Analyze blocks across the width
+      for (let x = 0; x < width - blockSize; x += blockSize) {
+        const blockStats = this.analyzeBlock(data, x, y, blockSize, width, height);
+        textLikelihood += blockStats.textLikelihood;
+        blockCount++;
+      }
+
+      const avgTextLikelihood = textLikelihood / blockCount;
+      textPatterns.push({ y, textLikelihood: avgTextLikelihood });
+    }
+
+    return textPatterns;
+  }
+
+  // Analyze a small block for text-like characteristics
+  analyzeBlock(data, startX, startY, blockSize, width, height) {
+    let brightPixels = 0;
+    let darkPixels = 0;
+    let totalVariance = 0;
+    let pixelCount = 0;
+
+    for (let y = startY; y < startY + blockSize; y++) {
+      for (let x = startX; x < startX + blockSize; x++) {
+        const pixelIndex = (y * width + x) * 4;
+        const r = data[pixelIndex];
+        const g = data[pixelIndex + 1];
+        const b = data[pixelIndex + 2];
+        const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+
+        if (gray > 128) brightPixels++;
+        else darkPixels++;
+
+        // Calculate local variance (indicates structure)
+        const neighbors = this.getNeighborValues(data, x, y, width, height);
+        const variance = this.calculateVariance(neighbors);
+        totalVariance += variance;
+        pixelCount++;
+      }
+    }
+
+    // Text-like blocks have good contrast ratio and moderate variance
+    const contrastRatio = Math.min(brightPixels, darkPixels) / Math.max(brightPixels, darkPixels);
+    const avgVariance = totalVariance / pixelCount;
+
+    // Text likelihood based on contrast and structure
+    let textLikelihood = 0;
+    if (contrastRatio > 0.2 && contrastRatio < 0.8) textLikelihood += 0.5; // Good contrast
+    if (avgVariance > 200 && avgVariance < 2000) textLikelihood += 0.5; // Structured but not noisy
+
+    return { textLikelihood };
+  }
+
+  // Get neighboring pixel values for variance calculation
+  getNeighborValues(data, x, y, width, height) {
+    const neighbors = [];
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx >= 0 && ny >= 0 && nx < width && ny < height) {
+          const idx = (ny * width + nx) * 4;
+          const gray = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
+          neighbors.push(gray);
+        }
+      }
+    }
+    return neighbors;
+  }
+
+  // Calculate variance of values
+  calculateVariance(values) {
+    const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
+    const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
+    return variance;
+  }
+
+  // Combine all detection methods to find text boundaries
+  combineTextDetectionMethods(brightnessProfile, edgeDensityProfile, textPatterns, height) {
+    console.log('Combining detection methods...');
+
+    // Find regions with high text likelihood
+    const textRegions = [];
+
+    // Look for brightness transitions (text appears brighter than black border)
+    const brightnessPeaks = this.findBrightnessPeaks(brightnessProfile);
+    console.log('Brightness peaks:', brightnessPeaks);
+
+    // Look for high edge density (text has many edges)
+    const edgePeaks = this.findEdgeDensityPeaks(edgeDensityProfile);
+    console.log('Edge density peaks:', edgePeaks);
+
+    // Look for text pattern matches
+    const textPeaks = this.findTextPatternPeaks(textPatterns);
+    console.log('Text pattern peaks:', textPeaks);
+
+    // Combine evidence from all methods
+    const combinedEvidence = this.combineEvidence(brightnessPeaks, edgePeaks, textPeaks, height);
+
+    if (combinedEvidence.textStart && combinedEvidence.textEnd) {
+      return {
+        startY: combinedEvidence.textStart,
+        height: combinedEvidence.textEnd - combinedEvidence.textStart
+      };
+    }
+
+    return null;
+  }
+
+  // Find brightness peaks that indicate text
+  findBrightnessPeaks(profile) {
+    const peaks = [];
+    const minBrightness = 30; // Minimum brightness to consider text
+
+    for (let i = 1; i < profile.length - 1; i++) {
+      const current = profile[i];
+      const prev = profile[i - 1];
+      const next = profile[i + 1];
+
+      // Look for brightness increases that indicate text on dark background
+      if (current.brightness > minBrightness &&
+          current.brightness > prev.brightness + 10 &&
+          current.brightness > next.brightness + 10) {
+        peaks.push(current.y);
+      }
+    }
+
+    return peaks;
+  }
+
+  // Find edge density peaks
+  findEdgeDensityPeaks(profile) {
+    const peaks = [];
+    const minEdgeDensity = 0.1; // Minimum edge density for text
+
+    for (let i = 1; i < profile.length - 1; i++) {
+      const current = profile[i];
+      const prev = profile[i - 1];
+      const next = profile[i + 1];
+
+      if (current.edgeDensity > minEdgeDensity &&
+          current.edgeDensity > prev.edgeDensity &&
+          current.edgeDensity > next.edgeDensity) {
+        peaks.push(current.y);
+      }
+    }
+
+    return peaks;
+  }
+
+  // Find text pattern peaks
+  findTextPatternPeaks(patterns) {
+    const peaks = [];
+    const minTextLikelihood = 0.3;
+
+    for (let i = 0; i < patterns.length; i++) {
+      const current = patterns[i];
+      if (current.textLikelihood > minTextLikelihood) {
+        peaks.push(current.y);
+      }
+    }
+
+    return peaks;
+  }
+
+  // Combine evidence from all methods
+  combineEvidence(brightnessPeaks, edgePeaks, textPeaks, height) {
+    // Find consensus regions where multiple methods agree
+    const consensusRegions = [];
+    const tolerance = 20; // Pixels tolerance for agreement
+
+    // Check each brightness peak against other methods
+    brightnessPeaks.forEach(bPeak => {
+      let score = 1; // Start with brightness evidence
+
+      // Check if edge density supports this region
+      const nearbyEdgePeak = edgePeaks.find(ePeak => Math.abs(ePeak - bPeak) < tolerance);
+      if (nearbyEdgePeak) score += 1;
+
+      // Check if text patterns support this region
+      const nearbyTextPeak = textPeaks.find(tPeak => Math.abs(tPeak - bPeak) < tolerance);
+      if (nearbyTextPeak) score += 1;
+
+      consensusRegions.push({ y: bPeak, score });
+    });
+
+    // Sort by score and y position
+    consensusRegions.sort((a, b) => {
+      if (a.score !== b.score) return b.score - a.score; // Higher score first
+      return a.y - b.y; // Lower y first (bottom of image)
+    });
+
+    console.log('Consensus regions:', consensusRegions);
+
+    if (consensusRegions.length >= 1) {
+      // Use the best consensus region as text start
+      // Assume text area extends 40-60 pixels upward (typical for 2 text lines)
+      const textStart = consensusRegions[0].y;
+      const estimatedTextHeight = Math.min(60, Math.floor(height * 0.08));
+      const textEnd = Math.min(textStart + estimatedTextHeight, height);
+
+      return {
+        textStart,
+        textEnd
+      };
+    }
+
+    return { textStart: null, textEnd: null };
+  }
+
+  // Fallback text detection using simple brightness analysis
+  fallbackTextDetection(data, width, height) {
+    console.log('Using fallback text detection');
+
+    // Simple approach: assume text is in bottom 15% of image
+    const textAreaHeight = Math.floor(height * 0.15);
+    const textStart = height - textAreaHeight;
+
+    return {
+      startY: textStart,
+      height: textAreaHeight
+    };
+  }
+
+  // Final crop to text area
+  cropToTextArea(canvas, textBounds) {
+    const textCanvas = document.createElement('canvas');
+    textCanvas.width = canvas.width;
+    textCanvas.height = textBounds.height;
+
+    const ctx = textCanvas.getContext('2d');
+    ctx.drawImage(
+      canvas,
+      0, textBounds.startY, canvas.width, textBounds.height,
+      0, 0, canvas.width, textBounds.height
+    );
+
+    return textCanvas;
+  }
+
+  // Helper function to copy a canvas
+  copyCanvas(sourceCanvas) {
+    const copyCanvas = document.createElement('canvas');
+    copyCanvas.width = sourceCanvas.width;
+    copyCanvas.height = sourceCanvas.height;
+
+    const ctx = copyCanvas.getContext('2d');
+    ctx.drawImage(sourceCanvas, 0, 0);
+
+    return copyCanvas;
+  }
+
+  // New method to perform foil detection on card area (not just collector number)
+  performFoilDetection(canvas) {
     const ctx = canvas.getContext('2d');
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imageData.data;
@@ -637,9 +1235,39 @@ class MTGScanner {
     // Analyze image characteristics to detect foil cards
     const imageStats = this.analyzeImageCharacteristics(data);
     const isFoil = this.detectFoilCard(imageStats);
-    
-    console.log('Image analysis:', imageStats);
-    console.log('Foil detected:', isFoil);
+
+    console.log('Foil detection - Image analysis:', imageStats);
+    console.log('Foil detection - Result:', isFoil);
+
+    // Store foil detection result for later use
+    this.lastDetectedFoil = isFoil;
+
+    return {
+      isFoil,
+      stats: imageStats
+    };
+  }
+
+  // Updated to accept foil detection result
+  processCollectorNumberImage(canvas, foilDetectionResult = null) {
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+
+    let isFoil, imageStats;
+
+    if (foilDetectionResult) {
+      // Use provided foil detection result
+      isFoil = foilDetectionResult.isFoil;
+      imageStats = foilDetectionResult.stats;
+      console.log('Using provided foil detection result:', isFoil);
+    } else {
+      // Fallback: analyze current image (for compatibility)
+      imageStats = this.analyzeImageCharacteristics(data);
+      isFoil = this.detectFoilCard(imageStats);
+      console.log('Fallback foil detection - Image analysis:', imageStats);
+      console.log('Fallback foil detection - Result:', isFoil);
+    }
 
     if (isFoil) {
       // Enhanced processing for foil cards
@@ -660,31 +1288,31 @@ class MTGScanner {
     let colorVariance = 0;
     let edgeIntensity = 0;
     let pixelCount = data.length / 4;
-    
+
     // Color distribution analysis
     let brightPixels = 0;
     let darkPixels = 0;
     let midtonePixels = 0;
-    
+
     for (let i = 0; i < data.length; i += 4) {
       const r = data[i];
       const g = data[i + 1];
       const b = data[i + 2];
-      
+
       // Calculate grayscale value
       const gray = 0.299 * r + 0.587 * g + 0.114 * b;
       totalBrightness += gray;
-      
+
       // Classify pixels by brightness
       if (gray > 180) brightPixels++;
       else if (gray < 75) darkPixels++;
       else midtonePixels++;
-      
+
       // Calculate color variance (measure of chromatic content)
       const avgRGB = (r + g + b) / 3;
       colorVariance += Math.abs(r - avgRGB) + Math.abs(g - avgRGB) + Math.abs(b - avgRGB);
     }
-    
+
     return {
       averageBrightness: totalBrightness / pixelCount,
       colorVariance: colorVariance / pixelCount,
@@ -700,13 +1328,13 @@ class MTGScanner {
     // 1. Higher color variance due to rainbow shimmer
     // 2. More midtone pixels (less pure black/white contrast)
     // 3. Higher average brightness in some areas
-    
+
     const foilIndicators = {
       highColorVariance: stats.colorVariance > 15, // Threshold may need tuning
       highMidtoneRatio: stats.midtonePixelRatio > 0.4,
       lowerContrast: stats.darkPixelRatio < 0.3 && stats.brightPixelRatio < 0.3
     };
-    
+
     // Consider it foil if at least 2 indicators are present
     const foilScore = Object.values(foilIndicators).filter(Boolean).length;
     return foilScore >= 2;
@@ -718,24 +1346,24 @@ class MTGScanner {
       const r = data[i];
       const g = data[i + 1];
       const b = data[i + 2];
-      
+
       // Convert to grayscale
       const gray = 0.299 * r + 0.587 * g + 0.114 * b;
-      
+
       // Adaptive thresholding for foil cards
       // Use dynamic threshold based on local characteristics
       let threshold = 128; // Base threshold
-      
+
       // Adjust threshold based on image characteristics
       if (stats.averageBrightness > 140) {
         threshold = 160; // Higher threshold for bright foils
       } else if (stats.averageBrightness < 100) {
         threshold = 100; // Lower threshold for dark foils
       }
-      
+
       // Apply sigmoid function for smoother transitions
       const sigmoid = 1 / (1 + Math.exp(-0.1 * (gray - threshold)));
-      
+
       // Enhanced contrast stretching specifically for foils
       let enhanced;
       if (gray > threshold) {
@@ -745,13 +1373,13 @@ class MTGScanner {
         // Dark regions: push towards black more aggressively
         enhanced = (gray / threshold) * 128 * 0.6;
       }
-      
+
       // Clamp values
       enhanced = Math.max(0, Math.min(255, enhanced));
-      
+
       // Invert for OCR (black text on white background)
       const inverted = 255 - enhanced;
-      
+
       data[i] = inverted;
       data[i + 1] = inverted;
       data[i + 2] = inverted;
@@ -806,133 +1434,53 @@ class MTGScanner {
     return cleaned.toUpperCase();
   }
 
-  // Fallback OCR strategy with multiple attempts
-  async performCollectorNumberOCRWithFallback(collectorCanvas) {
-    // First, analyze the image and detect if it's a foil card
-    const ctx = collectorCanvas.getContext('2d');
-    const imageData = ctx.getImageData(0, 0, collectorCanvas.width, collectorCanvas.height);
-    const imageStats = this.analyzeImageCharacteristics(imageData.data);
-    const isFoil = this.detectFoilCard(imageStats);
-    
-    // Store foil detection result for later use
-    this.lastDetectedFoil = isFoil;
-    console.log('Foil card detected:', isFoil);
-    
-    this.processCollectorNumberImage(collectorCanvas);
-    const strategies = [
-      {
-        name: 'optimal',
-        cropFunc: () => this.cropToCollectorNumberArea(collectorCanvas),
-        //processFunc: (canvas) => { this.processCollectorNumberImage(canvas); return canvas; }
-      },
-      {
-        name: 'wider',
-        cropFunc: () => this.cropToCollectorNumberAreaWider(collectorCanvas),
-        //processFunc: (canvas) => { this.processCollectorNumberImage(canvas); return canvas; }
-      },
-      {
-        name: 'offsetRight',
-        cropFunc: () => this.cropToCollectorNumberAreaOffset(collectorCanvas),
-        //processFunc: (canvas) => { this.processCollectorNumberImage(canvas); return canvas; }
+  // Simplified OCR strategy - automatic detection handles cropping and image processing
+  async performCollectorNumberOCRWithFallback(processedCanvas) {
+    // The canvas we receive has already been automatically cropped and processed
+    console.log('Performing OCR on automatically processed canvas');
+
+    // Store for debugging
+    this.collectorImages = [processedCanvas.toDataURL()];
+
+    try {
+      const ocrResult = await this.performCollectorNumberOCR(processedCanvas);
+
+      // Score both raw and cleaned results
+      const rawScore = this.scoreCollectorNumberResult(ocrResult.rawText);
+      const cleanedScore = this.scoreCollectorNumberResult(ocrResult.cleanedText);
+
+      console.log(`OCR Raw: "${ocrResult.rawText}" (score: ${rawScore})`);
+      console.log(`OCR Cleaned: "${ocrResult.cleanedText}" (score: ${cleanedScore})`);
+
+      // Use the better scoring result
+      const finalText = rawScore > cleanedScore ? ocrResult.rawText : ocrResult.cleanedText;
+      const finalScore = Math.max(rawScore, cleanedScore);
+
+      // Store OCR results in debug data
+      if (this.debugData) {
+        this.debugData.ocrResults = {
+          rawText: ocrResult.rawText,
+          cleanedText: ocrResult.cleanedText,
+          rawScore: rawScore,
+          cleanedScore: cleanedScore,
+          finalText: finalText,
+          finalScore: finalScore,
+          usedRaw: rawScore > cleanedScore
+        };
       }
-    ];
 
-    let bestResult = { text: '', score: 0, strategy: 'none' };
-    let statusOffset = 0;
+      console.log(`Final OCR result: "${finalText}" (score: ${finalScore})`);
+      this.updateStatus(`OCR abgeschlossen`, 90);
 
-    for (const strategy of strategies) {
-      try {
-        console.log(`Trying OCR strategy: ${strategy.name}`);
+      return finalText;
 
-        const cropCanvas = strategy.cropFunc();
-        this.collectorImages.push(cropCanvas.toDataURL());
-
-        //const processedCanvas = strategy.processFunc(cropCanvas);
-        const ocrResult = await this.performCollectorNumberOCR(cropCanvas);
-
-        // Score the result
-        const rawScore = this.scoreCollectorNumberResult(ocrResult.rawText);
-        console.log(`Score for "${ocrResult.rawText}": ${rawScore}`);
-        const cleanedScore = this.scoreCollectorNumberResult(ocrResult.cleanedText);
-        console.log(`Score for "${ocrResult.cleanedText}": ${cleanedScore}`);
-
-        let text = ocrResult.cleanedText;
-        let score = cleanedScore;
-
-        if (rawScore > cleanedScore) {
-          text = ocrResult.rawText;
-          score = rawScore;
-          console.log(`Using raw text "${ocrResult.rawText}" with score ${rawScore}`);
-        }
-
-        if (score > bestResult.score) {
-          bestResult = {
-            text,
-            score: score,
-            strategy: strategy.name
-          };
-        }
-
-        statusOffset += 10;
-        this.updateStatus(`Sammlernummer wird erkannt... %`, 50 + statusOffset);
-
-        // If we got a high-confidence result, use it immediately
-        if (score >= 80) {
-          console.log(`High confidence result from ${strategy.name}: "${text}"`);
-          this.updateStatus(`Sammelnummer mit hoher wahrscheinlichkeit gefunden %`, 80);
-          break;
-        }
-
-      } catch (error) {
-        console.log(`Strategy ${strategy.name} failed:`, error.message);
-      }
+    } catch (error) {
+      console.error('OCR failed:', error.message);
+      throw new Error('OCR-Verarbeitung fehlgeschlagen: ' + error.message);
     }
-
-    console.log(`Best OCR result: "${bestResult.text}" from ${bestResult.strategy} (score: ${bestResult.score})`);
-    return bestResult.text;
   }
 
-  // Alternative cropping methods for fallback
-  cropToCollectorNumberAreaWider(cardCanvas) {
-    // Slightly wider crop: 30% width, 10% height
-    const cropWidth = Math.floor(cardCanvas.width * 0.40);   // 40% width (wider)
-    const cropHeight = Math.floor(cardCanvas.height * 0.10); // 10% height (taller)
-    const startX = 0;                                        // left: 0
-    const startY = Math.floor(cardCanvas.height * 0.88);     // top: 88% (slightly higher)
-
-    const safeStartY = Math.min(startY, cardCanvas.height - cropHeight);
-    const safeWidth = Math.min(cropWidth, cardCanvas.width);
-    const safeHeight = Math.min(cropHeight, cardCanvas.height - safeStartY);
-
-    const canvas = document.createElement('canvas');
-    canvas.width = safeWidth;
-    canvas.height = safeHeight;
-
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(cardCanvas, startX, safeStartY, safeWidth, safeHeight, 0, 0, safeWidth, safeHeight);
-    return canvas;
-  }
-
-  cropToCollectorNumberAreaOffset(cardCanvas) {
-    // Offset right by 5% in case collector number isn't at exact left edge
-    const cropWidth = Math.floor(cardCanvas.width * 0.30);   // 30% width
-    const cropHeight = Math.floor(cardCanvas.height * 0.08); // 8% height
-    const startX = Math.floor(cardCanvas.width * 0.05);      // 5% offset right
-    const startY = Math.floor(cardCanvas.height * 0.90);     // top: 90%
-
-    const safeStartX = Math.min(startX, cardCanvas.width - cropWidth);
-    const safeStartY = Math.min(startY, cardCanvas.height - cropHeight);
-    const safeWidth = Math.min(cropWidth, cardCanvas.width - safeStartX);
-    const safeHeight = Math.min(cropHeight, cardCanvas.height - safeStartY);
-
-    const canvas = document.createElement('canvas');
-    canvas.width = safeWidth;
-    canvas.height = safeHeight;
-
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(cardCanvas, safeStartX, safeStartY, safeWidth, safeHeight, 0, 0, safeWidth, safeHeight);
-    return canvas;
-  }
+  // Alternative cropping methods removed - automatic detection handles all cropping optimally
 
   // Score OCR results to pick the best one
   scoreCollectorNumberResult(text) {
@@ -1216,13 +1764,13 @@ class MTGScanner {
     // Store the previous quantities for both foil and normal versions
     const normalVersion = { ...cardData, isFoil: false };
     const foilVersion = { ...cardData, isFoil: true };
-    
+
     cardData.previousQuantityNormal = this.getCardQuantity(normalVersion);
     cardData.previousQuantityFoil = this.getCardQuantity(foilVersion);
-    
+
     // Set the initial previous quantity based on current foil status
     cardData.previousQuantity = cardData.isFoil ? cardData.previousQuantityFoil : cardData.previousQuantityNormal;
-    
+
     // Set modal content
     this.modalCardName.textContent = cardData.name;
     this.modalCardSet.textContent = cardData.set;
@@ -1284,28 +1832,28 @@ class MTGScanner {
 
     // Store the current foil status before toggling
     const wasInitiallyFoil = this.currentCard.isFoil;
-    
+
     // Toggle the foil status
     this.currentCard.isFoil = !this.currentCard.isFoil;
-    
+
     console.log(`Toggled foil status from ${wasInitiallyFoil} to: ${this.currentCard.isFoil}`);
 
     // Update the modal UI
     this.updateFoilToggleButton(this.currentCard.isFoil);
     this.applyFoilEffectToModal(this.currentCard.isFoil);
-    
+
     // Update the previous quantity based on the new foil status
-    this.currentCard.previousQuantity = this.currentCard.isFoil ? 
-      this.currentCard.previousQuantityFoil : 
+    this.currentCard.previousQuantity = this.currentCard.isFoil ?
+      this.currentCard.previousQuantityFoil :
       this.currentCard.previousQuantityNormal;
-    
+
     // Update the quantity display to reflect the new foil status
     this.updateModalQuantityDisplay(this.currentCard);
-    
+
     // Show info about what will happen
     const newStatusText = this.currentCard.isFoil ? 'Foil' : 'Normal';
     const currentQuantity = this.getCardQuantity(this.currentCard);
-    
+
     if (currentQuantity > 0) {
       this.showInfo(`Switching to ${newStatusText} version. Current quantity: ${currentQuantity}`);
     } else {
@@ -1325,10 +1873,10 @@ class MTGScanner {
 
   applyFoilEffectToModal(isFoil) {
     const modalContent = this.cardModal.querySelector('.modal-content');
-    
+
     if (isFoil) {
       modalContent.classList.add('foil');
-      
+
       // Add foil indicator to card name if not already present
       if (!this.modalCardName.querySelector('.foil-indicator')) {
         const foilIndicator = document.createElement('span');
@@ -1338,7 +1886,7 @@ class MTGScanner {
       }
     } else {
       modalContent.classList.remove('foil');
-      
+
       // Remove foil indicator if present
       const existingIndicator = this.modalCardName.querySelector('.foil-indicator');
       if (existingIndicator) {
@@ -1458,7 +2006,7 @@ class MTGScanner {
       const languageDisplay = card.languageDisplay ? `<p class="card-language">🌍 ${card.languageDisplay}</p>` : '';
       const foilIndicator = card.isFoil ? `<span class="foil-indicator">✨ FOIL</span>` : '';
       const uniqueCardId = this.getUniqueCardId(card);
-      
+
       if (!uniqueCardId) {
         console.error('Could not generate unique ID for card:', card);
         continue;
@@ -1600,47 +2148,51 @@ class MTGScanner {
   }
 
   showCapturedImage() {
-    if (this.lastCapturedImage) {
-      this.displayDebugImage(this.lastCapturedImage, '📷 Original Image');
+    if (this.debugData.originalImage) {
+      this.displayDebugImage('📷 Original Image', this.debugData.originalImage,
+        'Ursprüngliches Bild vom Kamera-Stream oder hochgeladene Datei');
     } else {
-      this.showInfo('Kein aufgenommenes Bild verfügbar');
+      alert('Führen Sie zuerst einen Scan durch, um Debug-Bilder zu generieren.');
     }
   }
 
   showCardImage() {
-    if (this.lastCardImage) {
-      this.displayDebugImage(this.lastCardImage, '🏄 Card Image');
-    } else {
-      this.showInfo('Kein Kartenbild verfügbar');
-    }
+    // Legacy method - redirect to original image since we no longer do manual card cropping
+    this.showCapturedImage();
   }
-
 
   showCollectorImage() {
-    if (this.collectorImages.length > 0) {
-      const lastCollectorImage = this.collectorImages[this.collectorImages.length - 1];
-      this.displayDebugImage(lastCollectorImage, '🔢 Collector Number Area');
-    } else {
-      this.showInfo('Kein Sammlernummernbild verfügbar');
+    // Legacy method - redirect to final image since this shows the OCR-ready crop
+    this.showFinalImage();
+  }
+
+  showOCRResults() {
+    if (!this.debugData.ocrResults) {
+      alert('Führen Sie zuerst einen Scan durch, um OCR-Resultate zu generieren.');
+      return;
     }
-  }
 
-  displayDebugImage(imageDataUrl, title) {
-    const debugDisplay = document.getElementById('debugImageDisplay');
-    const debugImage = document.getElementById('debugImage');
-    const debugTitle = document.getElementById('debugImageTitle');
+    const ocr = this.debugData.ocrResults;
+    const description = `
+<strong>OCR-Verarbeitung Details:</strong><br><br>
+<strong>Rohtext (Tesseract):</strong><br>
+"${ocr.rawText}"<br>
+<em>Bewertung: ${ocr.rawScore} Punkte</em><br><br>
+<strong>Bereinigter Text:</strong><br>
+"${ocr.cleanedText}"<br>
+<em>Bewertung: ${ocr.cleanedScore} Punkte</em><br><br>
+<strong>Verwendetes Ergebnis:</strong><br>
+"${ocr.finalText}" (${ocr.usedRaw ? 'Rohtext' : 'Bereinigt'})<br>
+<em>Finale Bewertung: ${ocr.finalScore} Punkte</em><br><br>
+<strong>Bewertungskriterien:</strong><br>
+• Set-Code erkannt: +50 Punkte<br>
+• Seltenheitscode erkannt: +15 Punkte<br>
+• Kartennummer erkannt: +30 Punkte<br>
+• Sprachcode erkannt: +10 Punkte<br>
+• Ausreichende Länge: +5 Punkte
+    `;
 
-    debugTitle.textContent = title;
-    debugImage.src = imageDataUrl;
-    debugDisplay.hidden = false;
-
-    // Scroll to the debug image
-    debugDisplay.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
-
-  hideDebugImage() {
-    const debugDisplay = document.getElementById('debugImageDisplay');
-    debugDisplay.hidden = true;
+    this.displayDebugImage('OCR-Resultate & Bewertung', this.debugData.finalImage, description);
   }
 
   // Fetch card image to bypass CORS restrictions
@@ -1808,13 +2360,13 @@ class MTGScanner {
   showInfo(message, duration = 4000) {
     return this.showNotification(message, 'info', duration);
   }
-  
+
   // Collection Management Methods
-  
+
   initCollections() {
     // Initialize the collections system
     const collectionsData = this.getCollectionsData();
-    
+
     // If no collections exist, create default one
     if (Object.keys(collectionsData.collections).length === 0) {
       const defaultId = this.generateCollectionId();
@@ -1828,11 +2380,11 @@ class MTGScanner {
       collectionsData.activeCollection = defaultId;
       this.saveCollectionsData(collectionsData);
     }
-    
+
     this.collectionsData = collectionsData;
     this.populateCollectionSelector();
   }
-  
+
   getCollectionsData() {
     const stored = localStorage.getItem('mtg-collections-meta');
     if (stored) {
@@ -1842,13 +2394,13 @@ class MTGScanner {
         console.error('Error parsing collections data:', e);
       }
     }
-    
+
     return {
       collections: {},
       activeCollection: null
     };
   }
-  
+
   saveCollectionsData(data) {
     try {
       localStorage.setItem('mtg-collections-meta', JSON.stringify(data));
@@ -1858,15 +2410,15 @@ class MTGScanner {
       this.showError('Fehler beim Speichern der Sammlungsdaten');
     }
   }
-  
+
   generateCollectionId() {
     return 'coll_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
   }
-  
+
   getCollectionStorageKey(collectionId) {
     return `mtg-collection-${collectionId}`;
   }
-  
+
   loadActiveCollection() {
     const activeId = this.collectionsData.activeCollection;
     if (activeId && this.collectionsData.collections[activeId]) {
@@ -1877,82 +2429,82 @@ class MTGScanner {
       this.cards = [];
     }
   }
-  
+
   populateCollectionSelector() {
     if (!this.collectionSelect) {
       console.warn('Collection select element not found');
       return;
     }
-    
+
     this.collectionSelect.innerHTML = '';
-    
+
     Object.values(this.collectionsData.collections).forEach(collection => {
       const option = document.createElement('option');
       option.value = collection.id;
       option.textContent = collection.name;
-      
+
       if (collection.id === this.collectionsData.activeCollection) {
         option.selected = true;
       }
-      
+
       this.collectionSelect.appendChild(option);
     });
-    
+
     // Force the select to update its display
     this.collectionSelect.value = this.collectionsData.activeCollection;
   }
-  
+
   updateCollectionDisplay() {
     const activeCollection = this.collectionsData.collections[this.collectionsData.activeCollection];
     if (activeCollection) {
       this.currentCollectionName.textContent = activeCollection.name;
     }
   }
-  
+
   switchToCollection(collectionId) {
     if (collectionId === this.collectionsData.activeCollection) {
       return;
     }
-    
+
     // Save current collection first
     this.saveCollection();
-    
+
     // Switch to new collection
     this.collectionsData.activeCollection = collectionId;
     this.saveCollectionsData(this.collectionsData);
-    
+
     // Load new collection and update UI
     this.loadActiveCollection();
     this.populateCollectionSelector(); // Explicitly update selector
     this.updateCardCount();
     this.renderCollection();
-    
+
     const collection = this.collectionsData.collections[collectionId];
     this.showInfo(`Zu Sammlung "${collection.name}" gewechselt`);
   }
-  
+
   showCollectionModal() {
     this.renderCollectionsList();
     this.collectionModal.removeAttribute('hidden');
-    
+
     // Focus on new collection input
     setTimeout(() => {
       this.newCollectionName.focus();
     }, 100);
   }
-  
+
   hideCollectionModal() {
     this.collectionModal.setAttribute('hidden', '');
     this.newCollectionName.value = '';
   }
-  
+
   createNewCollection() {
     const name = this.newCollectionName.value.trim();
     if (!name) {
       this.showWarning('Bitte geben Sie einen Namen für die Sammlung ein');
       return;
     }
-    
+
     // Check for duplicate names
     const existingNames = Object.values(this.collectionsData.collections)
       .map(c => c.name.toLowerCase());
@@ -1960,7 +2512,7 @@ class MTGScanner {
       this.showWarning('Eine Sammlung mit diesem Namen existiert bereits');
       return;
     }
-    
+
     const newId = this.generateCollectionId();
     const newCollection = {
       id: newId,
@@ -1969,42 +2521,42 @@ class MTGScanner {
       lastModified: new Date().toISOString(),
       cardCount: 0
     };
-    
+
     this.collectionsData.collections[newId] = newCollection;
     this.saveCollectionsData(this.collectionsData);
-    
+
     // Create empty collection in storage
     const storageKey = this.getCollectionStorageKey(newId);
     localStorage.setItem(storageKey, JSON.stringify([]));
-    
+
     // Update UI
     this.populateCollectionSelector();
     this.renderCollectionsList();
-    
+
     this.showSuccess(`Sammlung "${name}" wurde erstellt`);
     this.newCollectionName.value = '';
   }
-  
+
   renderCollectionsList() {
     this.collectionsList.innerHTML = '';
-    
+
     const collections = Object.values(this.collectionsData.collections)
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    
+
     collections.forEach(collection => {
       const isActive = collection.id === this.collectionsData.activeCollection;
       const collectionElement = this.createCollectionListItem(collection, isActive);
       this.collectionsList.appendChild(collectionElement);
     });
   }
-  
+
   createCollectionListItem(collection, isActive) {
     const div = document.createElement('div');
     div.className = `collection-item ${isActive ? 'active' : ''}`;
-    
+
     const createdDate = new Date(collection.createdAt).toLocaleDateString('de-DE');
     const lastModifiedDate = new Date(collection.lastModified).toLocaleDateString('de-DE');
-    
+
     div.innerHTML = `
       <div class="collection-item-header">
         <h5 class="collection-name">${this.escapeHtml(collection.name)}</h5>
@@ -2034,29 +2586,29 @@ class MTGScanner {
         <button class="btn small danger" onclick="mtgScanner.deleteCollection('${collection.id}')">Löschen</button>
       </div>
     `;
-    
+
     return div;
   }
-  
+
   selectCollection(collectionId) {
     this.switchToCollection(collectionId);
     this.hideCollectionModal();
   }
-  
+
   renameCollection(collectionId) {
     const collection = this.collectionsData.collections[collectionId];
     if (!collection) {
       this.showError('Sammlung nicht gefunden');
       return;
     }
-    
+
     const newName = prompt('Neuer Name der Sammlung:', collection.name);
     if (!newName || newName.trim() === '') {
       return;
     }
-    
+
     const trimmedName = newName.trim();
-    
+
     // Check for duplicate names (excluding current collection)
     const existingNames = Object.values(this.collectionsData.collections)
       .filter(c => c.id !== collectionId)
@@ -2065,44 +2617,44 @@ class MTGScanner {
       this.showWarning('Eine Sammlung mit diesem Namen existiert bereits');
       return;
     }
-    
+
     collection.name = trimmedName;
     collection.lastModified = new Date().toISOString();
     this.saveCollectionsData(this.collectionsData);
-    
+
     // Update UI
     this.populateCollectionSelector();
     this.updateCollectionDisplay();
     this.renderCollectionsList();
-    
+
     this.showSuccess(`Sammlung wurde umbenannt zu "${trimmedName}"`);
   }
-  
+
   deleteCollection(collectionId) {
     const collection = this.collectionsData.collections[collectionId];
     if (!collection) {
       this.showError('Sammlung nicht gefunden');
       return;
     }
-    
+
     // Prevent deletion of the last collection
     if (Object.keys(this.collectionsData.collections).length === 1) {
       this.showWarning('Die letzte Sammlung kann nicht gelöscht werden');
       return;
     }
-    
+
     const confirmText = `Sind Sie sicher, dass Sie die Sammlung "${collection.name}" mit ${collection.cardCount} Karten löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.`;
     if (!confirm(confirmText)) {
       return;
     }
-    
+
     // Remove from collections metadata
     delete this.collectionsData.collections[collectionId];
-    
+
     // Remove collection data from localStorage
     const storageKey = this.getCollectionStorageKey(collectionId);
     localStorage.removeItem(storageKey);
-    
+
     // If this was the active collection, switch to another one
     if (this.collectionsData.activeCollection === collectionId) {
       const remainingCollections = Object.keys(this.collectionsData.collections);
@@ -2110,9 +2662,9 @@ class MTGScanner {
         this.collectionsData.activeCollection = remainingCollections[0];
       }
     }
-    
+
     this.saveCollectionsData(this.collectionsData);
-    
+
     // Update UI
     this.populateCollectionSelector();
     this.loadActiveCollection();
@@ -2120,18 +2672,18 @@ class MTGScanner {
     this.renderCollection();
     this.updateCollectionDisplay();
     this.renderCollectionsList();
-    
+
     this.showSuccess(`Sammlung "${collection.name}" wurde gelöscht`);
   }
-  
+
   // Update existing save method to work with active collection
   saveCollection() {
     const activeId = this.collectionsData.activeCollection;
     if (!activeId) return;
-    
+
     const storageKey = this.getCollectionStorageKey(activeId);
     localStorage.setItem(storageKey, JSON.stringify(this.cards));
-    
+
     // Update collection metadata
     const collection = this.collectionsData.collections[activeId];
     if (collection) {
@@ -2140,7 +2692,7 @@ class MTGScanner {
       this.saveCollectionsData(this.collectionsData);
     }
   }
-  
+
   // Migrate existing single collection to multi-collection system
   migrateExistingCollection() {
     const oldCollection = localStorage.getItem('mtg-collection');
@@ -2149,11 +2701,11 @@ class MTGScanner {
         const cards = JSON.parse(oldCollection);
         if (cards.length > 0) {
           console.log('Migrating existing collection to new system...');
-          
+
           // Find the default collection or create one
           const collectionsData = this.getCollectionsData();
           let defaultCollection = Object.values(collectionsData.collections)[0];
-          
+
           if (!defaultCollection) {
             const defaultId = this.generateCollectionId();
             defaultCollection = {
@@ -2166,20 +2718,20 @@ class MTGScanner {
             collectionsData.collections[defaultId] = defaultCollection;
             collectionsData.activeCollection = defaultId;
           }
-          
+
           // Migrate cards to new collection
           const newStorageKey = this.getCollectionStorageKey(defaultCollection.id);
           localStorage.setItem(newStorageKey, oldCollection);
-          
+
           // Update collection metadata
           defaultCollection.cardCount = cards.reduce((sum, card) => sum + (card.count || 1), 0);
           defaultCollection.lastModified = new Date().toISOString();
-          
+
           this.saveCollectionsData(collectionsData);
-          
+
           // Remove old storage
           localStorage.removeItem('mtg-collection');
-          
+
           this.showSuccess('Ihre bestehende Sammlung wurde erfolgreich migriert!');
           console.log('Collection migration completed');
         }
@@ -2187,30 +2739,30 @@ class MTGScanner {
         console.error('Error migrating collection:', e);
       }
     }
-    
+
   }
-  
+
   // Migrate existing cards to include foil status
   migrateFoilStatus() {
     if (!this.cards || !Array.isArray(this.cards)) {
       return;
     }
-    
+
     let migrationNeeded = false;
-    
+
     this.cards.forEach(card => {
       if (card.isFoil === undefined) {
         card.isFoil = false; // Default existing cards to normal (non-foil)
         migrationNeeded = true;
       }
     });
-    
+
     if (migrationNeeded) {
       console.log('Migrated existing collection to include foil status');
       this.saveCollection();
     }
   }
-  
+
   escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;

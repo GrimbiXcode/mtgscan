@@ -34,9 +34,19 @@
                 <!-- Camera container (hidden when camera stopped) -->
                 <div id="cameraContainer" class="camera-container" hidden>
                     <video id="video" autoplay playsinline></video>
-                    <div class="card-frame">
-                        <div class="frame-border">
-                            <div class="collector-area">Collector Number</div>
+                    <div class="alignment-grid">
+                        <div class="grid-lines horizontal">
+                            <div class="grid-line"></div>
+                            <div class="grid-line"></div>
+                            <div class="grid-line"></div>
+                        </div>
+                        <div class="grid-lines vertical">
+                            <div class="grid-line"></div>
+                            <div class="grid-line"></div>
+                            <div class="grid-line"></div>
+                        </div>
+                        <div class="grid-center">
+                            <div class="alignment-hint">📐 Karte orthogonal ausrichten</div>
                         </div>
                     </div>
                     <canvas id="canvas" hidden></canvas>
@@ -49,15 +59,11 @@
                     <button id="stopCamera" class="btn danger">⏹️ Stoppen</button>
                 </div>
 
-                <!-- Frame size controls (hidden when camera stopped) -->
-                <div id="frameSizeControls" class="frame-size-controls" hidden>
-                    <label for="frameSizeSlider" class="frame-size-label">
-                        📏 Rahmen-Größe: <span id="frameSizeValue">Medium</span>
-                    </label>
-                    <div class="frame-size-slider-container">
-                        <span class="size-label">Klein</span>
-                        <input type="range" id="frameSizeSlider" min="0.5" max="2" step="0.1" value="1" class="frame-size-slider">
-                        <span class="size-label">Groß</span>
+                <!-- Alignment instructions (hidden when camera stopped) -->
+                <div id="alignmentInstructions" class="alignment-instructions" hidden>
+                    <div class="instruction-text">
+                        📐 <strong>Ausrichtungs-Hilfe:</strong> Richten Sie die Karte parallel zu den Rasterlinien aus. 
+                        Die Kartenkanten sollten den horizontalen und vertikalen Linien folgen.
                     </div>
                 </div>
             </section>
@@ -67,12 +73,27 @@
                 <h3>🔧 Debug-Tools</h3>
                 <div class="debug-images">
                     <div class="debug-buttons">
-                        <button onclick="mtgScanner.showCapturedImage()" class="btn small">📷 Original</button>
-                        <button onclick="mtgScanner.showCardImage()" class="btn small">🎴 Card</button>
-                        <button onclick="mtgScanner.showCollectorImage()" class="btn small">🔢 Collector</button>
+                        <h4>🔍 Automatische Erkennung - Debug Schritte</h4>
+                        <div class="debug-button-grid">
+                            <button onclick="mtgScanner.showCapturedImage()" class="btn small">📷 Original</button>
+                            <button onclick="mtgScanner.showQuadrantImage()" class="btn small">📐 Quadrant</button>
+                            <button onclick="mtgScanner.showBottomCroppedImage()" class="btn small">⬇️ Unterer Rand</button>
+                            <button onclick="mtgScanner.showLeftCroppedImage()" class="btn small">⬅️ Linker Rand</button>
+                            <button onclick="mtgScanner.showTextAreaImage()" class="btn small">📝 Textbereich</button>
+                            <button onclick="mtgScanner.showFinalImage()" class="btn small">🎯 Final</button>
+                        </div>
+                        <div class="debug-ocr-section">
+                            <h5>🔍 OCR-Resultate</h5>
+                            <button onclick="mtgScanner.showOCRResults()" class="btn small">📝 OCR Details</button>
+                        </div>
+                        <div class="debug-stats" id="debugStats">
+                            <h5>🔧 Erkennungs-Parameter</h5>
+                            <div id="debugStatsContent">Führen Sie einen Scan durch, um Debug-Informationen zu sehen</div>
+                        </div>
                     </div>
                     <div class="debug-image-display" id="debugImageDisplay" hidden>
                         <h6 id="debugImageTitle">Debug Image</h6>
+                        <div class="debug-image-info" id="debugImageInfo"></div>
                         <img id="debugImage" alt="Debug Image" src="">
                         <button onclick="mtgScanner.hideDebugImage()" class="btn small">✕ Close</button>
                     </div>
