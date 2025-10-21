@@ -2302,11 +2302,26 @@ class MTGScanner {
     // Create notification element
     const notification = document.createElement('div');
     notification.className = `notification ${type}`;
-    notification.innerHTML = `
-      <div class="notification-icon">${icons[type] || icons.info}</div>
-      <div class="notification-content">${message}</div>
-      <button class="notification-close" aria-label="Close notification">✕</button>
-    `;
+
+    // Icon (HTML-safe, from known set)
+    const iconElem = document.createElement('div');
+    iconElem.className = 'notification-icon';
+    iconElem.innerHTML = icons[type] || icons.info;
+
+    // Message (potentially user input, MUST use textContent)
+    const messageElem = document.createElement('div');
+    messageElem.className = 'notification-content';
+    messageElem.textContent = message;
+
+    // Close button (static)
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'notification-close';
+    closeBtn.setAttribute('aria-label', 'Close notification');
+    closeBtn.textContent = '✕';
+
+    notification.appendChild(iconElem);
+    notification.appendChild(messageElem);
+    notification.appendChild(closeBtn);
 
     // Add to container
     this.notificationContainer.appendChild(notification);
