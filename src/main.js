@@ -1519,13 +1519,15 @@ class MTGScanner {
   }
 
   async performCollectorNumberOCR(canvas) {
-    // Load Tesseract.js if not already loaded
-    if (!window.Tesseract) {
-      await this.loadTesseract();
-    }
+    // Loaded on demand so the Tesseract.js chunk isn't fetched until OCR actually runs
+    const { default: Tesseract } = await import('tesseract.js');
 
     // OPTIMAL OCR configuration for collector numbers (found via systematic testing)
     const ocrConfig = {
+      // Self-hosted (same-origin) worker/core assets: the CDN defaults are
+      // blocked by COEP: require-corp once cross-origin isolation is enabled.
+      workerPath: '/tesseract/worker.min.js',
+      corePath: '/tesseract/core',
       logger: m => {
         if (m.status === 'recognizing text') {
           const progress = 80 + (m.progress * 10);
@@ -1554,17 +1556,6 @@ class MTGScanner {
     }
   }
 
-
-  async loadTesseract() {
-    return new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@6/dist/tesseract.min.js';
-      script.crossOrigin = 'anonymous';
-      script.onload = resolve;
-      script.onerror = reject;
-      document.head.appendChild(script);
-    });
-  }
 
   async searchCardByCollectorNumber(collectorInfo) {
     try {
