@@ -1234,16 +1234,18 @@ class MTGScanner {
 
     // Analyze image characteristics to detect foil cards
     const imageStats = this.analyzeImageCharacteristics(data);
-    const isFoil = this.detectFoilCard(imageStats);
+    const foilResult = this.detectFoilCard(imageStats);
 
     console.log('Foil detection - Image analysis:', imageStats);
-    console.log('Foil detection - Result:', isFoil);
+    console.log('Foil detection - Result:', foilResult.isFoil, 'Confidence:', foilResult.confidence);
 
     // Store foil detection result for later use
-    this.lastDetectedFoil = isFoil;
+    this.lastDetectedFoil = foilResult.isFoil;
+    this.lastFoilConfidence = foilResult.confidence;
 
     return {
-      isFoil,
+      isFoil: foilResult.isFoil,
+      confidence: foilResult.confidence,
       stats: imageStats
     };
   }
@@ -1256,23 +1258,29 @@ class MTGScanner {
 
     let isFoil, imageStats;
 
+    let foilConfidence = 1.0;
+
     if (foilDetectionResult) {
       // Use provided foil detection result
       isFoil = foilDetectionResult.isFoil;
+      foilConfidence = foilDetectionResult.confidence || 1.0;
       imageStats = foilDetectionResult.stats;
-      console.log('Using provided foil detection result:', isFoil);
+      console.log('Using provided foil detection result:', isFoil, 'Confidence:', foilConfidence);
     } else {
       // Fallback: analyze current image (for compatibility)
       imageStats = this.analyzeImageCharacteristics(data);
-      isFoil = this.detectFoilCard(imageStats);
+      const foilResult = this.detectFoilCard(imageStats);
+      isFoil = foilResult.isFoil;
+      foilConfidence = foilResult.confidence;
       console.log('Fallback foil detection - Image analysis:', imageStats);
-      console.log('Fallback foil detection - Result:', isFoil);
+      console.log('Fallback foil detection - Result:', isFoil, 'Confidence:', foilConfidence);
     }
 
-    if (isFoil) {
-      // Enhanced processing for foil cards
+    // Route to appropriate processing based on foil detection and confidence
+    if (isFoil || foilConfidence < 0.7) {
+      // Enhanced processing for foil cards or low confidence
       this.processFoilCollectorNumber(data, imageStats);
-      console.log('Applied foil-optimized collector number processing');
+      console.log('Applied foil-optimized collector number processing (foil:', isFoil, 'confidence:', foilConfidence.toFixed(2) + ')');
     } else {
       // Standard processing for normal cards
       this.processNormalCollectorNumber(data);
@@ -1294,6 +1302,9 @@ class MTGScanner {
     let darkPixels = 0;
     let midtonePixels = 0;
 
+    // First pass: calculate basic statistics
+    const brightnessValues = [];
+
     for (let i = 0; i < data.length; i += 4) {
       const r = data[i];
       const g = data[i + 1];
@@ -1302,6 +1313,7 @@ class MTGScanner {
       // Calculate grayscale value
       const gray = 0.299 * r + 0.587 * g + 0.114 * b;
       totalBrightness += gray;
+      brightnessValues.push(gray);
 
       // Classify pixels by brightness
       if (gray > 180) brightPixels++;
@@ -1313,8 +1325,17 @@ class MTGScanner {
       colorVariance += Math.abs(r - avgRGB) + Math.abs(g - avgRGB) + Math.abs(b - avgRGB);
     }
 
+    // Calculate brightness variance
+    const avgBrightness = totalBrightness / pixelCount;
+    let brightnessVariance = 0;
+    for (const brightness of brightnessValues) {
+      brightnessVariance += Math.pow(brightness - avgBrightness, 2);
+    }
+    brightnessVariance = Math.sqrt(brightnessVariance / pixelCount);
+
     return {
-      averageBrightness: totalBrightness / pixelCount,
+      averageBrightness: avgBrightness,
+      brightnessVariance: brightnessVariance,
       colorVariance: colorVariance / pixelCount,
       brightPixelRatio: brightPixels / pixelCount,
       darkPixelRatio: darkPixels / pixelCount,
@@ -1322,22 +1343,40 @@ class MTGScanner {
     };
   }
 
-  // Detect if this is likely a foil card based on image characteristics
+  // Constants for foil detection thresholds
+  static FOIL_COLOR_VARIANCE_THRESHOLD = 15;
+  static FOIL_MIDTONE_RATIO_THRESHOLD = 0.4;
+  static FOIL_CONTRAST_THRESHOLD = 0.3;
+  static FOIL_BRIGHTNESS_VARIANCE_THRESHOLD = 20;
+
+  /**
+   * Detects foil cards using multiple visual indicators
+   * @param {Object} stats - Image analysis statistics
+   * @returns {Object} Detection result with confidence score
+   */
   detectFoilCard(stats) {
     // Foil cards typically have:
     // 1. Higher color variance due to rainbow shimmer
     // 2. More midtone pixels (less pure black/white contrast)
-    // 3. Higher average brightness in some areas
+    // 3. Lower contrast (less pure black/white pixels)
+    // 4. Higher brightness variance from reflections
 
     const foilIndicators = {
-      highColorVariance: stats.colorVariance > 15, // Threshold may need tuning
-      highMidtoneRatio: stats.midtonePixelRatio > 0.4,
-      lowerContrast: stats.darkPixelRatio < 0.3 && stats.brightPixelRatio < 0.3
+      highColorVariance: stats.colorVariance > MTGScanner.FOIL_COLOR_VARIANCE_THRESHOLD,
+      highMidtoneRatio: stats.midtonePixelRatio > MTGScanner.FOIL_MIDTONE_RATIO_THRESHOLD,
+      lowerContrast: stats.darkPixelRatio < MTGScanner.FOIL_CONTRAST_THRESHOLD &&
+                    stats.brightPixelRatio < MTGScanner.FOIL_CONTRAST_THRESHOLD,
+      highBrightnessVariance: stats.brightnessVariance > MTGScanner.FOIL_BRIGHTNESS_VARIANCE_THRESHOLD
     };
 
     // Consider it foil if at least 2 indicators are present
     const foilScore = Object.values(foilIndicators).filter(Boolean).length;
-    return foilScore >= 2;
+
+    // Return both detection result and confidence score
+    return {
+      isFoil: foilScore >= 2,
+      confidence: foilScore / Object.keys(foilIndicators).length
+    };
   }
 
   // Enhanced processing specifically for foil cards
@@ -1404,6 +1443,120 @@ class MTGScanner {
     }
   }
 
+  // Constants for CLAHE processing
+  static CLAHE_TILE_SIZE = 32;
+  static CLAHE_CLIP_LIMIT = 0.01;
+
+  /**
+   * CLAHE (Contrast Limited Adaptive Histogram Equalization) for foil cards
+   * Better handles high-reflection areas by local contrast enhancement
+   * @param {Uint8Array} data - Image pixel data
+   * @param {Object} stats - Image statistics
+   */
+  processFoilWithCLAHE(data, stats) {
+    const width = Math.sqrt(data.length / 4);
+    const height = width;
+    const tileSize = MTGScanner.CLAHE_TILE_SIZE; // Tile size for local processing
+
+    for (let y = 0; y < height; y += tileSize) {
+      for (let x = 0; x < width; x += tileSize) {
+        // Process each tile
+        const endY = Math.min(y + tileSize, height);
+        const endX = Math.min(x + tileSize, width);
+
+        // Collect histogram for this tile
+        const histogram = new Array(256).fill(0);
+        let pixelCount = 0;
+
+        for (let ty = y; ty < endY; ty++) {
+          for (let tx = x; tx < endX; tx++) {
+            const idx = (ty * width + tx) * 4;
+            const gray = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
+            histogram[Math.floor(gray)]++;
+            pixelCount++;
+          }
+        }
+
+        // Calculate CDF and equalize
+        let cdf = 0;
+        const cdfMin = pixelCount * MTGScanner.CLAHE_CLIP_LIMIT; // Clip limit
+        const equalized = new Array(256).fill(0);
+
+        for (let i = 0; i < 256; i++) {
+          cdf += histogram[i];
+          equalized[i] = Math.floor((cdf - cdfMin) / (pixelCount - cdfMin) * 255);
+          equalized[i] = Math.max(0, Math.min(255, equalized[i]));
+        }
+
+        // Apply equalization to tile
+        for (let ty = y; ty < endY; ty++) {
+          for (let tx = x; tx < endX; tx++) {
+            const idx = (ty * width + tx) * 4;
+            const gray = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
+            const enhanced = equalized[Math.floor(gray)];
+
+            // Invert for OCR
+            const inverted = 255 - enhanced;
+            data[idx] = inverted;
+            data[idx + 1] = inverted;
+            data[idx + 2] = inverted;
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Morphological processing for foil cards
+   * Uses opening and closing operations to reduce glare effects
+   * @param {Uint8Array} data - Image pixel data
+   * @param {Object} stats - Image statistics
+   */
+  processFoilMorphological(data, stats) {
+    const width = Math.sqrt(data.length / 4);
+    const height = width;
+
+    // Convert to grayscale first
+    const grayData = new Uint8Array(width * height);
+    for (let i = 0; i < data.length; i += 4) {
+      grayData[i/4] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    }
+
+    // Erosion (opening)
+    const eroded = new Uint8Array(width * height);
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const idx = y * width + x;
+        const neighborhood = [
+          grayData[(y-1)*width + (x-1)], grayData[(y-1)*width + x], grayData[(y-1)*width + (x+1)],
+          grayData[y*width + (x-1)], grayData[idx], grayData[y*width + (x+1)],
+          grayData[(y+1)*width + (x-1)], grayData[(y+1)*width + x], grayData[(y+1)*width + (x+1)]
+        ];
+        eroded[idx] = Math.min(...neighborhood);
+      }
+    }
+
+    // Dilation (closing)
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const idx = y * width + x;
+        const neighborhood = [
+          eroded[(y-1)*width + (x-1)], eroded[(y-1)*width + x], eroded[(y-1)*width + (x+1)],
+          eroded[y*width + (x-1)], eroded[idx], eroded[y*width + (x+1)],
+          eroded[(y+1)*width + (x-1)], eroded[(y+1)*width + x], eroded[(y+1)*width + (x+1)]
+        ];
+        const dilated = Math.max(...neighborhood);
+
+        // Invert for OCR
+        const inverted = 255 - dilated;
+        const dataIdx = idx * 4;
+        data[dataIdx] = inverted;
+        data[dataIdx + 1] = inverted;
+        data[dataIdx + 2] = inverted;
+      }
+    }
+  }
+
 
   // Clean OCR text to handle common issues like duplicated characters
   cleanOCRText(rawText) {
@@ -1434,23 +1587,106 @@ class MTGScanner {
     return cleaned.toUpperCase();
   }
 
-  // Simplified OCR strategy - automatic detection handles cropping and image processing
+  // Enhanced OCR strategy with dual-path architecture and multi-attempt processing
   async performCollectorNumberOCRWithFallback(processedCanvas) {
     // The canvas we receive has already been automatically cropped and processed
-    console.log('Performing OCR on automatically processed canvas');
+    console.log('Performing enhanced OCR with dual-path architecture');
 
     // Store for debugging
     this.collectorImages = [processedCanvas.toDataURL()];
 
     try {
-      const ocrResult = await this.performCollectorNumberOCR(processedCanvas);
+      // Step 1: Detect foil with confidence
+      const foilDetection = this.detectFoilCardFromCanvas(processedCanvas);
+      console.log(`Foil detection: isFoil=${foilDetection.isFoil}, confidence=${foilDetection.confidence.toFixed(2)}`);
+
+      // Step 2: Route to appropriate processing path
+      if (foilDetection.isFoil || foilDetection.confidence < 0.7) {
+        console.log('Using foil processing path');
+        return this.processFoilCardWithMultiAttempt(processedCanvas, foilDetection);
+      } else {
+        console.log('Using standard processing path');
+        return this.processStandardCardWithFallback(processedCanvas);
+      }
+
+    } catch (error) {
+      console.error('Enhanced OCR failed:', error.message);
+      // Fallback to original method
+      console.log('Falling back to original OCR method');
+      return this.performOriginalOCR(processedCanvas);
+    }
+  }
+
+  /**
+   * Detects foil cards directly from canvas element
+   * @param {HTMLCanvasElement} canvas - Canvas element to analyze
+   * @returns {Object} Foil detection result with confidence
+   */
+  detectFoilCardFromCanvas(canvas) {
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const stats = this.analyzeImageCharacteristics(imageData.data);
+    return this.detectFoilCard(stats);
+  }
+
+  /**
+   * Processes foil cards using multiple OCR strategies
+   * @param {HTMLCanvasElement} canvas - Canvas with foil card image
+   * @param {Object} foilDetection - Foil detection result
+   * @returns {Promise<string>} Best OCR result text
+   */
+  async processFoilCardWithMultiAttempt(canvas, foilDetection) {
+    // Define multiple preprocessing strategies for foil cards
+    const strategies = [
+      {
+        name: 'adaptiveThreshold',
+        func: (data, stats) => this.processFoilCollectorNumber(data, stats),
+        stats: foilDetection.stats || {}
+      },
+      {
+        name: 'clahe',
+        func: (data, stats) => this.processFoilWithCLAHE(data, stats),
+        stats: foilDetection.stats || {}
+      },
+      {
+        name: 'morphological',
+        func: (data, stats) => this.processFoilMorphological(data, stats),
+        stats: foilDetection.stats || {}
+      }
+    ];
+
+    // Run multi-attempt OCR
+    const result = await this.runMultiAttemptOCR(canvas, strategies);
+
+    // Store results in debug data
+    if (this.debugData) {
+      this.debugData.ocrResults = {
+        ...this.debugData.ocrResults,
+        foilProcessing: true,
+        strategiesUsed: strategies.map(s => s.name),
+        finalResult: result
+      };
+    }
+
+    this.updateStatus(`Foil-OCR abgeschlossen`, 90);
+    return result;
+  }
+
+  /**
+   * Processes standard (non-foil) cards with fallback handling
+   * @param {HTMLCanvasElement} canvas - Canvas with card image
+   * @returns {Promise<string>} OCR result text
+   */
+  async processStandardCardWithFallback(canvas) {
+    try {
+      const ocrResult = await this.performCollectorNumberOCR(canvas);
 
       // Score both raw and cleaned results
       const rawScore = this.scoreCollectorNumberResult(ocrResult.rawText);
       const cleanedScore = this.scoreCollectorNumberResult(ocrResult.cleanedText);
 
-      console.log(`OCR Raw: "${ocrResult.rawText}" (score: ${rawScore})`);
-      console.log(`OCR Cleaned: "${ocrResult.cleanedText}" (score: ${cleanedScore})`);
+      console.log(`Standard OCR Raw: "${ocrResult.rawText}" (score: ${rawScore})`);
+      console.log(`Standard OCR Cleaned: "${ocrResult.cleanedText}" (score: ${cleanedScore})`);
 
       // Use the better scoring result
       const finalText = rawScore > cleanedScore ? ocrResult.rawText : ocrResult.cleanedText;
@@ -1465,19 +1701,34 @@ class MTGScanner {
           cleanedScore: cleanedScore,
           finalText: finalText,
           finalScore: finalScore,
-          usedRaw: rawScore > cleanedScore
+          usedRaw: rawScore > cleanedScore,
+          foilProcessing: false
         };
       }
 
-      console.log(`Final OCR result: "${finalText}" (score: ${finalScore})`);
+      console.log(`Final standard OCR result: "${finalText}" (score: ${finalScore})`);
       this.updateStatus(`OCR abgeschlossen`, 90);
 
       return finalText;
 
     } catch (error) {
-      console.error('OCR failed:', error.message);
-      throw new Error('OCR-Verarbeitung fehlgeschlagen: ' + error.message);
+      console.error('Standard OCR failed:', error.message);
+      throw error;
     }
+  }
+
+  /**
+   * Fallback to original OCR method for error recovery
+   * @param {HTMLCanvasElement} canvas - Canvas to process
+   * @returns {Promise<string>} OCR result text
+   */
+  async performOriginalOCR(canvas) {
+    console.log('Using original OCR method as fallback');
+    const ocrResult = await this.performCollectorNumberOCR(canvas);
+    const finalText = this.scoreCollectorNumberResult(ocrResult.cleanedText) > this.scoreCollectorNumberResult(ocrResult.rawText)
+      ? ocrResult.cleanedText : ocrResult.rawText;
+    this.updateStatus(`Fallback OCR abgeschlossen`, 90);
+    return finalText;
   }
 
   // Alternative cropping methods removed - automatic detection handles all cropping optimally
@@ -1516,6 +1767,73 @@ class MTGScanner {
     console.log(`Score for "${text}": ${score}`);
 
     return score;
+  }
+
+  /**
+   * Executes a single OCR strategy and returns result with confidence score
+   * @param {HTMLCanvasElement} canvas - Input canvas to process
+   * @param {Object} strategy - Strategy configuration
+   * @returns {Promise<Object>} OCR result with confidence
+   */
+  async tryOCRStrategy(canvas, strategy) {
+    // Create a copy of the canvas to avoid modifying the original
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = canvas.width;
+    tempCanvas.height = canvas.height;
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCtx.drawImage(canvas, 0, 0);
+
+    const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+    const data = imageData.data;
+
+    // Apply the strategy's processing
+    strategy.func(data, strategy.stats || {});
+    tempCtx.putImageData(imageData, 0, 0);
+
+    // Perform OCR
+    const ocrResult = await this.performCollectorNumberOCR(tempCanvas);
+    const confidence = this.scoreCollectorNumberResult(ocrResult.cleanedText) / 100;
+
+    console.log(`Strategy "${strategy.name}" result: "${ocrResult.cleanedText}" (confidence: ${confidence.toFixed(2)})`);
+
+    return {
+      text: ocrResult.cleanedText,
+      confidence: confidence,
+      strategy: strategy.name
+    };
+  }
+
+  /**
+   * Runs multiple OCR strategies and selects the best result by confidence
+   * @param {HTMLCanvasElement} canvas - Input canvas to process
+   * @param {Array} strategies - Array of strategy configurations
+   * @returns {Promise<string>} Best OCR result text
+   */
+  async runMultiAttemptOCR(canvas, strategies) {
+    let bestResult = { text: '', confidence: 0, strategy: 'none' };
+
+    for (let i = 0; i < strategies.length; i++) {
+      const strategy = strategies[i];
+      try {
+        const result = await this.tryOCRStrategy(canvas, strategy);
+
+        if (result.confidence > bestResult.confidence) {
+          bestResult = result;
+
+          // Early exit if we have high confidence
+          if (result.confidence > 0.85) {
+            console.log(`Early exit - high confidence (${result.confidence.toFixed(2)}) with strategy: ${result.strategy}`);
+            break;
+          }
+        }
+      } catch (error) {
+        console.warn(`Strategy "${strategy.name}" failed:`, error.message);
+        // Continue with next strategy
+      }
+    }
+
+    console.log(`Best OCR result: "${bestResult.text}" (confidence: ${bestResult.confidence.toFixed(2)}) from strategy: ${bestResult.strategy}`);
+    return bestResult.text;
   }
 
   async performCollectorNumberOCR(canvas) {
