@@ -2293,17 +2293,31 @@ class MTGScanner {
     // Create notification element
     const notification = document.createElement('div');
     notification.className = `notification ${type}`;
-    notification.innerHTML = `
-      <div class="notification-icon">${icons[type] || icons.info}</div>
-      <div class="notification-content">${message}</div>
-      <button class="notification-close" aria-label="Close notification">✕</button>
-    `;
+
+    // Icon comes from the hardcoded set above
+    const iconElem = document.createElement('div');
+    iconElem.className = 'notification-icon';
+    iconElem.textContent = icons[type] || icons.info;
+
+    // Message may contain untrusted text (API data, error messages) —
+    // textContent so it is never reinterpreted as HTML
+    const messageElem = document.createElement('div');
+    messageElem.className = 'notification-content';
+    messageElem.textContent = message;
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'notification-close';
+    closeBtn.setAttribute('aria-label', 'Close notification');
+    closeBtn.textContent = '✕';
+
+    notification.appendChild(iconElem);
+    notification.appendChild(messageElem);
+    notification.appendChild(closeBtn);
 
     // Add to container
     this.notificationContainer.appendChild(notification);
 
     // Handle close button
-    const closeBtn = notification.querySelector('.notification-close');
     closeBtn.addEventListener('click', () => this.hideNotification(notification));
 
     // Show with animation
