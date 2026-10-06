@@ -127,5 +127,8 @@ playwright-report/
 # Tesseract training data
 *.traineddata
 
+# Vendored Tesseract worker/core assets (copied from node_modules at build/dev time)
+public/tesseract/
+
 # local deploy file
 deploy.sh

@@ -35,7 +35,8 @@ mtgscan/
 │   ├── privacy.html              # Privacy policy (German)
 │   ├── terms.html                # Terms of use (German)
 │   ├── imprint.html              # Legal imprint (German)
-│   └── legal-en.html             # Legal summary (English)
+│   ├── legal-en.html             # Legal summary (English)
+│   └── tesseract/                # (gitignored) Tesseract.js worker + core WASM, vendored from node_modules by the vite plugin
 ├── assets/
 │   └── default-card.png          # Placeholder card image
 ├── sandbox/
@@ -189,7 +190,7 @@ Before adding any new feature, ask:
 4. Will users actually use this?
 
 ### Performance
-- Lazy load Tesseract.js only when needed
+- Lazy load Tesseract.js only when needed: `main.js` does `await import('tesseract.js')` on first OCR (npm package, not a CDN script), and the vite `vendorTesseractAssets` plugin copies its worker/core files into `public/tesseract/` so they load same-origin under `COEP: require-corp`; only the English language data still comes from the jsdelivr CDN (fetched via CORS, which COEP allows)
 - Use canvas for image processing
 - Store collection in localStorage
 - Minimal DOM manipulation

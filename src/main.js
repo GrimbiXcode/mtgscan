@@ -182,7 +182,6 @@ class MTGScanner {
       }
     }
 
-
     // load all collections from scryfall
     fetch('https://api.scryfall.com/sets?order=set&dir=asc&format=json')
     .then(response => response.json())
@@ -700,13 +699,15 @@ class MTGScanner {
   }
 
   async performCollectorNumberOCR(canvas) {
-    // Load Tesseract.js if not already loaded
-    if (!window.Tesseract) {
-      await this.loadTesseract();
-    }
+    // Loaded on demand so the Tesseract.js chunk isn't fetched until OCR actually runs
+    const { default: Tesseract } = await import('tesseract.js');
 
     // OPTIMAL OCR configuration for collector numbers (found via systematic testing)
     const ocrConfig = {
+      // Self-hosted (same-origin) worker/core assets: the CDN defaults are
+      // blocked by COEP: require-corp once cross-origin isolation is enabled.
+      workerPath: '/tesseract/worker.min.js',
+      corePath: '/tesseract/core',
       logger: m => {
         if (m.status === 'recognizing text') {
           const progress = 80 + (m.progress * 10);
@@ -731,17 +732,6 @@ class MTGScanner {
       console.error('Collector number OCR Error:', error);
       throw error;
     }
-  }
-
-  async loadTesseract() {
-    return new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@6/dist/tesseract.min.js';
-      script.crossOrigin = 'anonymous';
-      script.onload = resolve;
-      script.onerror = reject;
-      document.head.appendChild(script);
-    });
   }
 
   async searchCardByCollectorNumber(collectorInfo) {
@@ -1210,7 +1200,6 @@ class MTGScanner {
     }
   }
 
-
   exportCollection() {
     // Generate Moxfield-compatible CSV format
     const csvHeaders = ['Count', 'Name', 'Edition', 'Condition', 'Language', 'Foil', 'Collector Number'];
@@ -1419,17 +1408,31 @@ class MTGScanner {
     // Create notification element
     const notification = document.createElement('div');
     notification.className = `notification ${type}`;
-    notification.innerHTML = `
-      <div class="notification-icon">${icons[type] || icons.info}</div>
-      <div class="notification-content">${message}</div>
-      <button class="notification-close" aria-label="Close notification">✕</button>
-    `;
+
+    // Icon comes from the hardcoded set above
+    const iconElem = document.createElement('div');
+    iconElem.className = 'notification-icon';
+    iconElem.textContent = icons[type] || icons.info;
+
+    // Message may contain untrusted text (API data, error messages) —
+    // textContent so it is never reinterpreted as HTML
+    const messageElem = document.createElement('div');
+    messageElem.className = 'notification-content';
+    messageElem.textContent = message;
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'notification-close';
+    closeBtn.setAttribute('aria-label', 'Close notification');
+    closeBtn.textContent = '✕';
+
+    notification.appendChild(iconElem);
+    notification.appendChild(messageElem);
+    notification.appendChild(closeBtn);
 
     // Add to container
     this.notificationContainer.appendChild(notification);
 
     // Handle close button
-    const closeBtn = notification.querySelector('.notification-close');
     closeBtn.addEventListener('click', () => this.hideNotification(notification));
 
     // Show with animation
