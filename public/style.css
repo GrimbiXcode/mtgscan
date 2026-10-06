@@ -1048,6 +1048,49 @@ header h1 {
     font-size: 0.95rem;
 }
 
+.modal-confidence-badge {
+    margin: 0;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.modal-confidence-badge.medium {
+    background: #fffcf5;
+    color: #b8760f;
+    border: 1px solid #f39c12;
+}
+
+.modal-confidence-badge.low {
+    background: #fff8f8;
+    color: #c0392b;
+    border: 1px solid #e74c3c;
+}
+
+.manual-correction-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+}
+
+.manual-correction-section label {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #495057;
+}
+
+.manual-correction-section input {
+    padding: 0.5rem;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    font-size: 0.95rem;
+}
+
 .quantity-section {
     background: #f8f9fa;
     padding: 1rem;

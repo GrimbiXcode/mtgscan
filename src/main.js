@@ -1,4 +1,7 @@
 // Simple MTG Scanner - Main Application
+import { cleanOCRText, scoreCollectorNumberResult, parseCollectorNumber, mapLanguageCode, getLanguageDisplayName } from './recognition/parsing.js';
+import { runDetectionVariants } from './recognition/pipeline.js';
+
 class MTGScanner {
   constructor() {
     this.video = document.getElementById('video');
@@ -88,6 +91,12 @@ class MTGScanner {
     this.foilToggleBtn = document.getElementById('foilToggleBtn');
     this.foilToggleText = document.getElementById('foilToggleText');
 
+    // Confidence badge & manual correction elements
+    this.modalConfidenceBadge = document.getElementById('modalConfidenceBadge');
+    this.manualCorrectionSection = document.getElementById('manualCorrectionSection');
+    this.manualCollectorInput = document.getElementById('manualCollectorInput');
+    this.manualRetryBtn = document.getElementById('manualRetryBtn');
+
     // Collection management elements
     this.currentCollectionName = document.getElementById('currentCollectionName');
     this.collectionSelect = document.getElementById('collectionSelect');
@@ -123,6 +132,7 @@ class MTGScanner {
     this.modalCloseBtn.addEventListener('click', () => this.hideCardModal());
     this.backToScannerBtn.addEventListener('click', () => this.hideCardModal());
     this.foilToggleBtn.addEventListener('click', () => this.toggleFoilStatus());
+    this.manualRetryBtn.addEventListener('click', () => this.retryManualCorrection());
 
     // Close modal when clicking overlay
     this.cardModal.addEventListener('click', (e) => {
@@ -171,7 +181,6 @@ class MTGScanner {
         console.warn('Loading collections from scryfall...');
       }
     }
-
 
     // load all collections from scryfall
     fetch('https://api.scryfall.com/sets?order=set&dir=asc&format=json')
@@ -354,38 +363,55 @@ class MTGScanner {
 
   async processImage(canvas) {
     try {
-
-      // OCR with automatic card detection and cropping
       this.updateStatus('Karte wird automatisch erkannt...', 50);
 
-      // Perform automatic card detection first
-      const processedCanvas = this.cropToCollectorNumberArea(canvas);
+      // Multi-attempt detection + OCR: try several crop/binarization
+      // variants and rank them by how plausible the OCR text looks.
+      const rankedCandidates = await this.performCollectorNumberOCRWithFallback(canvas);
+      const bestGuessText = rankedCandidates[0]?.text || '';
 
-      // Then perform OCR on the processed canvas
-      const collectorInfo = await this.performCollectorNumberOCRWithFallback(processedCanvas);
-
-
-      // Search card by collector number
+      // Search card by collector number, trying the next-best candidate on
+      // a miss instead of giving up after the first one.
       this.updateStatus('Karte wird gesucht...', 90);
-      const cardData = await this.searchCardByCollectorNumber(collectorInfo);
+      let cardData = null;
+      let usedCandidate = null;
+      for (const candidate of rankedCandidates.slice(0, 3)) {
+        if (!candidate.text) continue;
+        cardData = await this.searchCardByCollectorNumber(candidate.text);
+        if (cardData) {
+          usedCandidate = candidate;
+          break;
+        }
+      }
 
       this.updateStatus('Fertig!', 100);
 
       if (cardData) {
-        this.showResults(cardData, canvas, `Sammlernummer: ${collectorInfo}`);
+        cardData.confidence = this.classifyConfidence(usedCandidate.score);
+        this.showResults(cardData, canvas, `Sammlernummer: ${usedCandidate.text}`);
         this.showSuccess(`Karte ${cardData.name} wurde gefunden.`)
       } else {
-        this.showWarning(`Karte mit Sammlernummer "${collectorInfo}" wurde nicht gefunden.`);
-        // Show results anyway for debugging
+        this.showWarning(`Karte mit Sammlernummer "${bestGuessText}" wurde nicht gefunden.`);
+        // Show results with an editable collector number so the user can
+        // correct a misread digit instead of hitting a dead end.
         this.showResults({
-          name: `Unbekannte Karte (${collectorInfo})`,
+          isUnknown: true,
+          name: `Unbekannte Karte (${bestGuessText})`,
           set: 'Nicht gefunden',
           image: '/assets/default-card.png'
-        }, canvas, collectorInfo);
+        }, canvas, bestGuessText);
       }
     } catch (error) {
       throw new Error('Fehler beim Verarbeiten: ' + error.message);
     }
+  }
+
+  // Confidence tiers derived from the OCR/parse score; HIGH matches the
+  // short-circuit threshold used in performCollectorNumberOCRWithFallback.
+  classifyConfidence(score) {
+    if (score >= 80) return 'HIGH';
+    if (score >= 40) return 'MEDIUM';
+    return 'LOW';
   }
 
   async captureCardByCollectorNumber() {
@@ -459,6 +485,13 @@ class MTGScanner {
       html += `<span class="debug-stat-label">  └─ Used Version:</span>`;
       html += `<span class="debug-stat-value">${ocr.usedRaw ? 'Raw' : 'Cleaned'}</span>`;
       html += `</div>`;
+
+      if (ocr.usedVariant) {
+        html += `<div class="debug-stat-item">`;
+        html += `<span class="debug-stat-label">  └─ Winning Variant:</span>`;
+        html += `<span class="debug-stat-value">${ocr.usedVariant} (${ocr.attempts?.length || 1} attempt${(ocr.attempts?.length || 1) === 1 ? '' : 's'} tried)</span>`;
+        html += `</div>`;
+      }
     }
 
     stats.steps.forEach(step => {
@@ -485,6 +518,13 @@ class MTGScanner {
         html += `<div class="debug-stat-item">`;
         html += `<span class="debug-stat-label">  └─ Left Edge:</span>`;
         html += `<span class="debug-stat-value">${step.leftEdge}px</span>`;
+        html += `</div>`;
+      }
+
+      if (step.confidence) {
+        html += `<div class="debug-stat-item">`;
+        html += `<span class="debug-stat-label">  └─ Edge Confidence:</span>`;
+        html += `<span class="debug-stat-value">${step.confidence}</span>`;
         html += `</div>`;
       }
 
@@ -568,954 +608,94 @@ class MTGScanner {
     this.debugImageDisplay.hidden = true;
   }
 
-  cropToCollectorNumberArea(cardCanvas) {
-    // Use automatic card detection as primary method
-    console.log('Using automatic card detection...');
-    const autoDetectedCanvas = this.automaticCardDetection(cardCanvas);
+  // Runs detection + OCR against a small set of crop/binarization variants
+  // (see runDetectionVariants), scoring each result and returning every
+  // attempt ranked best-first so the caller can retry the next-best
+  // candidate if the top one doesn't resolve to a real card.
+  async performCollectorNumberOCRWithFallback(sourceCanvas) {
+    const variants = runDetectionVariants(sourceCanvas);
+    const primaryDebug = variants[0].result.debug;
 
-    if (autoDetectedCanvas) {
-      console.log('Automatic card detection successful');
-      return autoDetectedCanvas;
-    }
-
-    // If automatic detection fails, show error to user
-    console.error('Automatic card detection failed');
-    throw new Error('Kartenerkennung fehlgeschlagen. Bitte stellen Sie sicher, dass die Karte gut ausgerichtet und gut beleuchtet ist.');
-  }
-
-  // Manual crop method removed - automatic detection only
-
-  // New automatic card detection algorithm
-  automaticCardDetection(sourceCanvas) {
-    const ctx = sourceCanvas.getContext('2d');
-    const imageData = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
-    const data = imageData.data;
-    const width = sourceCanvas.width;
-    const height = sourceCanvas.height;
-
-    console.log('Starting automatic card detection on image:', { width, height });
-
-    // Reset debug data
     this.debugData = {
       originalImage: sourceCanvas.toDataURL(),
-      quadrantImage: null,
-      bottomCroppedImage: null,
-      leftCroppedImage: null,
-      textAreaImage: null,
-      finalImage: null,
+      quadrantImage: primaryDebug.quadrantImage.toDataURL(),
+      bottomCroppedImage: primaryDebug.bottomCroppedImage.toDataURL(),
+      leftCroppedImage: primaryDebug.leftCroppedImage.toDataURL(),
+      textAreaImage: primaryDebug.textAreaImage.toDataURL(),
+      finalImage: primaryDebug.finalImage.toDataURL(),
       ocrResults: null,
       detectionStats: {
-        originalSize: { width, height },
-        steps: []
+        originalSize: { width: sourceCanvas.width, height: sourceCanvas.height },
+        steps: primaryDebug.steps
       }
     };
 
-    // Step 1: Crop to lower left quadrant
-    const quadrantCanvas = this.cropToLowerLeftQuadrant(sourceCanvas);
-    this.debugData.quadrantImage = quadrantCanvas.toDataURL();
-    this.debugData.detectionStats.steps.push({
-      step: 1,
-      name: 'Quadrant Crop',
-      status: 'SUCCESS',
-      size: { width: quadrantCanvas.width, height: quadrantCanvas.height }
-    });
-    console.log('Step 1 complete: Cropped to lower left quadrant');
+    this.lastDetectedFoil = variants[0].result.foilDetected;
+    this.collectorImages = [];
 
-    // Step 2: Find bottom card edge using black threshold on right edge
-    const bottomEdge = this.findBottomCardEdge(quadrantCanvas);
-    if (bottomEdge === null) {
-      console.log('Step 2 failed: Could not find bottom card edge');
-      this.debugData.detectionStats.steps.push({ step: 2, name: 'Bottom Edge Detection', status: 'FAILED' });
-      return null;
+    const attempts = [];
+    let best = null;
+
+    for (const variant of variants) {
+      this.collectorImages.push(variant.result.canvas.toDataURL());
+
+      let ocrResult;
+      try {
+        ocrResult = await this.performCollectorNumberOCR(variant.result.canvas);
+      } catch (error) {
+        console.error(`OCR failed for variant "${variant.name}":`, error.message);
+        continue;
+      }
+
+      const rawScore = scoreCollectorNumberResult(ocrResult.rawText, this.collectionRegex);
+      const cleanedScore = scoreCollectorNumberResult(ocrResult.cleanedText, this.collectionRegex);
+      const usedRaw = rawScore > cleanedScore;
+      const text = usedRaw ? ocrResult.rawText : ocrResult.cleanedText;
+      const score = Math.max(rawScore, cleanedScore);
+
+      console.log(`[${variant.name}] OCR Raw: "${ocrResult.rawText}" (${rawScore}) / Cleaned: "${ocrResult.cleanedText}" (${cleanedScore})`);
+
+      attempts.push({
+        variant: variant.name,
+        rawText: ocrResult.rawText,
+        cleanedText: ocrResult.cleanedText,
+        rawScore,
+        cleanedScore,
+        usedRaw,
+        text,
+        score
+      });
+
+      if (!best || score > best.score) {
+        best = attempts[attempts.length - 1];
+        this.lastDetectedFoil = variant.result.foilDetected;
+        this.debugData.finalImage = variant.result.canvas.toDataURL();
+      }
+
+      if (score >= 80) break; // High confidence, stop trying more variants
     }
-    console.log('Step 2 complete: Found bottom card edge at y =', bottomEdge);
 
-    // Crop to bottom edge
-    const bottomCroppedCanvas = this.cropToBottomEdge(quadrantCanvas, bottomEdge);
-    this.debugData.bottomCroppedImage = bottomCroppedCanvas.toDataURL();
-    this.debugData.detectionStats.steps.push({
-      step: 2,
-      name: 'Bottom Edge Detection',
-      status: 'SUCCESS',
-      bottomEdge,
-      size: { width: bottomCroppedCanvas.width, height: bottomCroppedCanvas.height }
-    });
-    console.log('Cropped to bottom edge');
-
-    // Step 3: Find left card edge using black threshold on bottom edge
-    const leftEdge = this.findLeftCardEdge(bottomCroppedCanvas);
-    if (leftEdge === null) {
-      console.log('Step 3 failed: Could not find left card edge');
-      this.debugData.detectionStats.steps.push({ step: 3, name: 'Left Edge Detection', status: 'FAILED' });
-      return null;
+    if (!best) {
+      throw new Error('OCR-Verarbeitung fehlgeschlagen: kein Ergebnis für alle Varianten');
     }
-    console.log('Step 3 complete: Found left card edge at x =', leftEdge);
 
-    // Crop to left edge
-    const leftCroppedCanvas = this.cropToLeftEdge(bottomCroppedCanvas, leftEdge);
-    this.debugData.leftCroppedImage = leftCroppedCanvas.toDataURL();
+    this.debugData.ocrResults = {
+      rawText: best.rawText,
+      cleanedText: best.cleanedText,
+      rawScore: best.rawScore,
+      cleanedScore: best.cleanedScore,
+      finalText: best.text,
+      finalScore: best.score,
+      usedRaw: best.usedRaw,
+      usedVariant: best.variant,
+      attempts
+    };
 
-    // Now perform foil detection on the cropped card area
-    const foilDetectionResult = this.performFoilDetection(leftCroppedCanvas);
-    this.debugData.detectionStats.steps.push({
-      step: 3,
-      name: 'Left Edge Detection',
-      status: 'SUCCESS',
-      leftEdge,
-      foilDetected: foilDetectionResult.isFoil,
-      foilStats: foilDetectionResult.stats,
-      size: { width: leftCroppedCanvas.width, height: leftCroppedCanvas.height }
-    });
-    console.log('Cropped to left edge and detected foil status:', foilDetectionResult.isFoil);
-
-    // Step 4: Find text lines using brightness analysis
-    const textBounds = this.findTextLineBounds(leftCroppedCanvas);
-    if (!textBounds) {
-      console.log('Step 4 failed: Could not find text line bounds');
-      this.debugData.detectionStats.steps.push({ step: 4, name: 'Text Line Detection', status: 'FAILED' });
-      return null;
-    }
-    console.log('Step 4 complete: Found text bounds:', textBounds);
-
-    // Create intermediate canvas showing text area before final processing
-    const textAreaCanvas = this.cropToTextArea(leftCroppedCanvas, textBounds);
-
-    // Store text area image (before processing) for debugging
-    this.debugData.textAreaImage = textAreaCanvas.toDataURL();
-
-    // Create final canvas (copy for processing)
-    const finalCanvas = this.copyCanvas(textAreaCanvas);
-
-    // Now apply image processing optimization for OCR based on foil detection
-    this.processCollectorNumberImage(finalCanvas, foilDetectionResult);
-    this.debugData.finalImage = finalCanvas.toDataURL();
-
-    this.debugData.detectionStats.steps.push({
-      step: 4,
-      name: 'Text Line Detection & OCR Optimization',
-      status: 'SUCCESS',
-      usedEnhanced: textBounds.usedEnhanced,
-      textBounds,
-      imageProcessingApplied: true,
-      size: { width: finalCanvas.width, height: finalCanvas.height }
-    });
-    console.log('Automatic detection complete: Final crop and image processing applied');
-
-    // Update debug stats display
+    console.log(`Final OCR result: "${best.text}" (score: ${best.score}, variant: ${best.variant})`);
+    this.updateStatus('OCR abgeschlossen', 90);
     this.updateDebugStats();
 
-    return finalCanvas;
-  }
-
-  // Step 1: Crop to lower left quadrant
-  cropToLowerLeftQuadrant(canvas) {
-    const quadrantWidth = Math.floor(canvas.width / 2);
-    const quadrantHeight = Math.floor(canvas.height / 2);
-    const startX = 0;
-    const startY = Math.floor(canvas.height / 2);
-
-    const quadrantCanvas = document.createElement('canvas');
-    quadrantCanvas.width = quadrantWidth;
-    quadrantCanvas.height = quadrantHeight;
-
-    const ctx = quadrantCanvas.getContext('2d');
-    ctx.drawImage(
-      canvas,
-      startX, startY, quadrantWidth, quadrantHeight,
-      0, 0, quadrantWidth, quadrantHeight
-    );
-
-    return quadrantCanvas;
-  }
-
-  // Step 2: Find bottom card edge by scanning right edge for black pixels
-  findBottomCardEdge(canvas) {
-    const ctx = canvas.getContext('2d');
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data;
-    const width = canvas.width;
-    const height = canvas.height;
-
-    const blackThreshold = 100; // Pixels darker than this are considered "card edge"
-    const pixelSampleWidth = Math.max(3, Math.floor(width * 0.15)); // Sample 15% of width or min 3 pixels
-
-    // Start from bottom and work up along the right edge
-    for (let y = height - 1; y >= 0; y--) {
-      let blackPixelCount = 0;
-      let totalPixels = 0;
-
-      // Sample multiple pixels horizontally near the right edge
-      for (let x = width - pixelSampleWidth; x < width; x++) {
-        if (x >= 0) {
-          const pixelIndex = (y * width + x) * 4;
-          const r = data[pixelIndex];
-          const g = data[pixelIndex + 1];
-          const b = data[pixelIndex + 2];
-          const gray = 0.299 * r + 0.587 * g + 0.114 * b;
-
-          totalPixels++;
-          if (gray < blackThreshold) {
-            blackPixelCount++;
-          }
-        }
-      }
-
-      // If majority of sampled pixels are black, this might be the card edge
-      const blackRatio = blackPixelCount / totalPixels;
-      if (blackRatio > 0.6) { // 60% of pixels must be black
-        return y;
-      }
-    }
-
-    return null; // No edge found
-  }
-
-  // Crop image from top to bottom edge
-  cropToBottomEdge(canvas, bottomEdge) {
-    const croppedHeight = bottomEdge + 1;
-    const croppedCanvas = document.createElement('canvas');
-    croppedCanvas.width = canvas.width;
-    croppedCanvas.height = croppedHeight;
-
-    const ctx = croppedCanvas.getContext('2d');
-    ctx.drawImage(
-      canvas,
-      0, 0, canvas.width, croppedHeight,
-      0, 0, canvas.width, croppedHeight
-    );
-
-    return croppedCanvas;
-  }
-
-  // Step 3: Find left card edge by scanning bottom edge for black pixels
-  findLeftCardEdge(canvas) {
-    const ctx = canvas.getContext('2d');
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data;
-    const width = canvas.width;
-    const height = canvas.height;
-
-    const blackThreshold = 100;
-    const pixelSampleHeight = Math.max(3, Math.floor(height * 0.1)); // Sample bottom 10% or min 3 pixels
-
-    // Start from left and work right along the bottom edge
-    for (let x = 0; x < width; x++) {
-      let blackPixelCount = 0;
-      let totalPixels = 0;
-
-      // Sample multiple pixels vertically near the bottom edge
-      for (let y = height - pixelSampleHeight; y < height; y++) {
-        if (y >= 0) {
-          const pixelIndex = (y * width + x) * 4;
-          const r = data[pixelIndex];
-          const g = data[pixelIndex + 1];
-          const b = data[pixelIndex + 2];
-          const gray = 0.299 * r + 0.587 * g + 0.114 * b;
-
-          totalPixels++;
-          if (gray < blackThreshold) {
-            blackPixelCount++;
-          }
-        }
-      }
-
-      // If majority of sampled pixels are black, this might be the card edge
-      const blackRatio = blackPixelCount / totalPixels;
-      if (blackRatio > 0.6) { // 60% of pixels must be black
-        return x;
-      }
-    }
-
-    return null; // No edge found
-  }
-
-  // Crop image from left edge to right
-  cropToLeftEdge(canvas, leftEdge) {
-    const croppedWidth = canvas.width - leftEdge;
-    const croppedCanvas = document.createElement('canvas');
-    croppedCanvas.width = croppedWidth;
-    croppedCanvas.height = canvas.height;
-
-    const ctx = croppedCanvas.getContext('2d');
-    ctx.drawImage(
-      canvas,
-      leftEdge, 0, croppedWidth, canvas.height,
-      0, 0, croppedWidth, canvas.height
-    );
-
-    return croppedCanvas;
-  }
-
-  // Step 4: Enhanced text line detection using multiple analysis methods
-  findTextLineBounds(canvas) {
-    const ctx = canvas.getContext('2d');
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data;
-    const width = canvas.width;
-    const height = canvas.height;
-
-    console.log('Starting enhanced text line detection on image:', { width, height });
-
-    // Method 1: Brightness profile analysis
-    const brightnessProfile = this.analyzeBrightnessProfile(data, width, height);
-
-    // Method 2: Edge density analysis
-    const edgeDensityProfile = this.analyzeEdgeDensityProfile(data, width, height);
-
-    // Method 3: Text pattern detection
-    const textPatterns = this.detectTextPatterns(data, width, height);
-
-    // Combine all methods to find the most likely text boundaries
-    const textBounds = this.combineTextDetectionMethods(brightnessProfile, edgeDensityProfile, textPatterns, height);
-
-    if (textBounds) {
-      console.log('Enhanced text detection successful:', textBounds);
-      return { ...textBounds, usedEnhanced: true};
-    }
-
-    // Fallback to simpler method if enhanced detection fails
-    console.log('Enhanced detection failed, trying fallback method');
-    const fallbackTextBounds = this.fallbackTextDetection(data, width, height);
-    return { ...fallbackTextBounds, usedEnhanced: false};
-  }
-
-  // Method 1: Analyze brightness profile across horizontal lines
-  analyzeBrightnessProfile(data, width, height) {
-    let brightnessProfile = [];
-    const sampleWidth = Math.floor(width * 0.8); // Sample 80% of width from left
-
-    // Scan from bottom to top
-    for (let y = height - 1; y >= 0; y--) {
-      let totalBrightness = 0;
-      let pixelCount = 0;
-
-      // Sample across most of the width
-      for (let x = 0; x < sampleWidth; x++) {
-        const pixelIndex = (y * width + x) * 4;
-        const r = data[pixelIndex];
-        const g = data[pixelIndex + 1];
-        const b = data[pixelIndex + 2];
-        const gray = 0.299 * r + 0.587 * g + 0.114 * b;
-
-        totalBrightness += gray;
-        pixelCount++;
-      }
-
-      const avgBrightness = totalBrightness / pixelCount;
-      brightnessProfile.push({ y, brightness: avgBrightness });
-    }
-
-    return brightnessProfile;
-  }
-
-  // Method 2: Analyze edge density to find text boundaries
-  analyzeEdgeDensityProfile(data, width, height) {
-    let edgeDensityProfile = [];
-    const sobelThreshold = 50;
-
-    // Scan from bottom to top
-    for (let y = 1; y < height - 1; y++) {
-      let edgeCount = 0;
-      let totalPixels = 0;
-
-      // Sample across width, but avoid edges
-      for (let x = 1; x < width - 1; x++) {
-        // Calculate Sobel operator for edge detection
-        const gx = this.getSobelX(data, x, y, width);
-        const gy = this.getSobelY(data, x, y, width);
-        const edgeStrength = Math.sqrt(gx * gx + gy * gy);
-
-        if (edgeStrength > sobelThreshold) {
-          edgeCount++;
-        }
-        totalPixels++;
-      }
-
-      const edgeDensity = edgeCount / totalPixels;
-      edgeDensityProfile.push({ y, edgeDensity });
-    }
-
-    return edgeDensityProfile;
-  }
-
-  // Helper function for Sobel X operator
-  getSobelX(data, x, y, width) {
-    const getPixel = (px, py) => {
-      const idx = (py * width + px) * 4;
-      return 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
-    };
-
-    return (
-      -1 * getPixel(x - 1, y - 1) + 1 * getPixel(x + 1, y - 1) +
-      -2 * getPixel(x - 1, y) + 2 * getPixel(x + 1, y) +
-      -1 * getPixel(x - 1, y + 1) + 1 * getPixel(x + 1, y + 1)
-    );
-  }
-
-  // Helper function for Sobel Y operator
-  getSobelY(data, x, y, width) {
-    const getPixel = (px, py) => {
-      const idx = (py * width + px) * 4;
-      return 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
-    };
-
-    return (
-      -1 * getPixel(x - 1, y - 1) + -2 * getPixel(x, y - 1) + -1 * getPixel(x + 1, y - 1) +
-      1 * getPixel(x - 1, y + 1) + 2 * getPixel(x, y + 1) + 1 * getPixel(x + 1, y + 1)
-    );
-  }
-
-  // Method 3: Detect text patterns by analyzing contrast and structure
-  detectTextPatterns(data, width, height) {
-    let textPatterns = [];
-    const blockSize = 8; // Analyze in 8x8 blocks
-
-    // Scan in blocks from bottom to top
-    for (let y = height - blockSize; y >= 0; y -= blockSize) {
-      let textLikelihood = 0;
-      let blockCount = 0;
-
-      // Analyze blocks across the width
-      for (let x = 0; x < width - blockSize; x += blockSize) {
-        const blockStats = this.analyzeBlock(data, x, y, blockSize, width, height);
-        textLikelihood += blockStats.textLikelihood;
-        blockCount++;
-      }
-
-      const avgTextLikelihood = textLikelihood / blockCount;
-      textPatterns.push({ y, textLikelihood: avgTextLikelihood });
-    }
-
-    return textPatterns;
-  }
-
-  // Analyze a small block for text-like characteristics
-  analyzeBlock(data, startX, startY, blockSize, width, height) {
-    let brightPixels = 0;
-    let darkPixels = 0;
-    let totalVariance = 0;
-    let pixelCount = 0;
-
-    for (let y = startY; y < startY + blockSize; y++) {
-      for (let x = startX; x < startX + blockSize; x++) {
-        const pixelIndex = (y * width + x) * 4;
-        const r = data[pixelIndex];
-        const g = data[pixelIndex + 1];
-        const b = data[pixelIndex + 2];
-        const gray = 0.299 * r + 0.587 * g + 0.114 * b;
-
-        if (gray > 128) brightPixels++;
-        else darkPixels++;
-
-        // Calculate local variance (indicates structure)
-        const neighbors = this.getNeighborValues(data, x, y, width, height);
-        const variance = this.calculateVariance(neighbors);
-        totalVariance += variance;
-        pixelCount++;
-      }
-    }
-
-    // Text-like blocks have good contrast ratio and moderate variance
-    const contrastRatio = Math.min(brightPixels, darkPixels) / Math.max(brightPixels, darkPixels);
-    const avgVariance = totalVariance / pixelCount;
-
-    // Text likelihood based on contrast and structure
-    let textLikelihood = 0;
-    if (contrastRatio > 0.2 && contrastRatio < 0.8) textLikelihood += 0.5; // Good contrast
-    if (avgVariance > 200 && avgVariance < 2000) textLikelihood += 0.5; // Structured but not noisy
-
-    return { textLikelihood };
-  }
-
-  // Get neighboring pixel values for variance calculation
-  getNeighborValues(data, x, y, width, height) {
-    const neighbors = [];
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        const nx = x + dx;
-        const ny = y + dy;
-        if (nx >= 0 && ny >= 0 && nx < width && ny < height) {
-          const idx = (ny * width + nx) * 4;
-          const gray = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
-          neighbors.push(gray);
-        }
-      }
-    }
-    return neighbors;
-  }
-
-  // Calculate variance of values
-  calculateVariance(values) {
-    const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
-    const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
-    return variance;
-  }
-
-  // Combine all detection methods to find text boundaries
-  combineTextDetectionMethods(brightnessProfile, edgeDensityProfile, textPatterns, height) {
-    console.log('Combining detection methods...');
-
-    // Find regions with high text likelihood
-    const textRegions = [];
-
-    // Look for brightness transitions (text appears brighter than black border)
-    const brightnessPeaks = this.findBrightnessPeaks(brightnessProfile);
-    console.log('Brightness peaks:', brightnessPeaks);
-
-    // Look for high edge density (text has many edges)
-    const edgePeaks = this.findEdgeDensityPeaks(edgeDensityProfile);
-    console.log('Edge density peaks:', edgePeaks);
-
-    // Look for text pattern matches
-    const textPeaks = this.findTextPatternPeaks(textPatterns);
-    console.log('Text pattern peaks:', textPeaks);
-
-    // Combine evidence from all methods
-    const combinedEvidence = this.combineEvidence(brightnessPeaks, edgePeaks, textPeaks, height);
-
-    if (combinedEvidence.textStart && combinedEvidence.textEnd) {
-      return {
-        startY: combinedEvidence.textStart,
-        height: combinedEvidence.textEnd - combinedEvidence.textStart
-      };
-    }
-
-    return null;
-  }
-
-  // Find brightness peaks that indicate text
-  findBrightnessPeaks(profile) {
-    const peaks = [];
-    const minBrightness = 30; // Minimum brightness to consider text
-
-    for (let i = 1; i < profile.length - 1; i++) {
-      const current = profile[i];
-      const prev = profile[i - 1];
-      const next = profile[i + 1];
-
-      // Look for brightness increases that indicate text on dark background
-      if (current.brightness > minBrightness &&
-          current.brightness > prev.brightness + 10 &&
-          current.brightness > next.brightness + 10) {
-        peaks.push(current.y);
-      }
-    }
-
-    return peaks;
-  }
-
-  // Find edge density peaks
-  findEdgeDensityPeaks(profile) {
-    const peaks = [];
-    const minEdgeDensity = 0.1; // Minimum edge density for text
-
-    for (let i = 1; i < profile.length - 1; i++) {
-      const current = profile[i];
-      const prev = profile[i - 1];
-      const next = profile[i + 1];
-
-      if (current.edgeDensity > minEdgeDensity &&
-          current.edgeDensity > prev.edgeDensity &&
-          current.edgeDensity > next.edgeDensity) {
-        peaks.push(current.y);
-      }
-    }
-
-    return peaks;
-  }
-
-  // Find text pattern peaks
-  findTextPatternPeaks(patterns) {
-    const peaks = [];
-    const minTextLikelihood = 0.3;
-
-    for (let i = 0; i < patterns.length; i++) {
-      const current = patterns[i];
-      if (current.textLikelihood > minTextLikelihood) {
-        peaks.push(current.y);
-      }
-    }
-
-    return peaks;
-  }
-
-  // Combine evidence from all methods
-  combineEvidence(brightnessPeaks, edgePeaks, textPeaks, height) {
-    // Find consensus regions where multiple methods agree
-    const consensusRegions = [];
-    const tolerance = 20; // Pixels tolerance for agreement
-
-    // Check each brightness peak against other methods
-    brightnessPeaks.forEach(bPeak => {
-      let score = 1; // Start with brightness evidence
-
-      // Check if edge density supports this region
-      const nearbyEdgePeak = edgePeaks.find(ePeak => Math.abs(ePeak - bPeak) < tolerance);
-      if (nearbyEdgePeak) score += 1;
-
-      // Check if text patterns support this region
-      const nearbyTextPeak = textPeaks.find(tPeak => Math.abs(tPeak - bPeak) < tolerance);
-      if (nearbyTextPeak) score += 1;
-
-      consensusRegions.push({ y: bPeak, score });
-    });
-
-    // Sort by score and y position
-    consensusRegions.sort((a, b) => {
-      if (a.score !== b.score) return b.score - a.score; // Higher score first
-      return a.y - b.y; // Lower y first (bottom of image)
-    });
-
-    console.log('Consensus regions:', consensusRegions);
-
-    if (consensusRegions.length >= 1) {
-      // Use the best consensus region as text start
-      // Assume text area extends 40-60 pixels upward (typical for 2 text lines)
-      const textStart = consensusRegions[0].y;
-      const estimatedTextHeight = Math.min(60, Math.floor(height * 0.08));
-      const textEnd = Math.min(textStart + estimatedTextHeight, height);
-
-      return {
-        textStart,
-        textEnd
-      };
-    }
-
-    return { textStart: null, textEnd: null };
-  }
-
-  // Fallback text detection using simple brightness analysis
-  fallbackTextDetection(data, width, height) {
-    console.log('Using fallback text detection');
-
-    // Simple approach: assume text is in bottom 15% of image
-    const textAreaHeight = Math.floor(height * 0.15);
-    const textStart = height - textAreaHeight;
-
-    return {
-      startY: textStart,
-      height: textAreaHeight
-    };
-  }
-
-  // Final crop to text area
-  cropToTextArea(canvas, textBounds) {
-    const textCanvas = document.createElement('canvas');
-    textCanvas.width = canvas.width;
-    textCanvas.height = textBounds.height;
-
-    const ctx = textCanvas.getContext('2d');
-    ctx.drawImage(
-      canvas,
-      0, textBounds.startY, canvas.width, textBounds.height,
-      0, 0, canvas.width, textBounds.height
-    );
-
-    return textCanvas;
-  }
-
-  // Helper function to copy a canvas
-  copyCanvas(sourceCanvas) {
-    const copyCanvas = document.createElement('canvas');
-    copyCanvas.width = sourceCanvas.width;
-    copyCanvas.height = sourceCanvas.height;
-
-    const ctx = copyCanvas.getContext('2d');
-    ctx.drawImage(sourceCanvas, 0, 0);
-
-    return copyCanvas;
-  }
-
-  // New method to perform foil detection on card area (not just collector number)
-  performFoilDetection(canvas) {
-    const ctx = canvas.getContext('2d');
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data;
-
-    // Analyze image characteristics to detect foil cards
-    const imageStats = this.analyzeImageCharacteristics(data);
-    const isFoil = this.detectFoilCard(imageStats);
-
-    console.log('Foil detection - Image analysis:', imageStats);
-    console.log('Foil detection - Result:', isFoil);
-
-    // Store foil detection result for later use
-    this.lastDetectedFoil = isFoil;
-
-    return {
-      isFoil,
-      stats: imageStats
-    };
-  }
-
-  // Updated to accept foil detection result
-  processCollectorNumberImage(canvas, foilDetectionResult = null) {
-    const ctx = canvas.getContext('2d');
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data;
-
-    let isFoil, imageStats;
-
-    if (foilDetectionResult) {
-      // Use provided foil detection result
-      isFoil = foilDetectionResult.isFoil;
-      imageStats = foilDetectionResult.stats;
-      console.log('Using provided foil detection result:', isFoil);
-    } else {
-      // Fallback: analyze current image (for compatibility)
-      imageStats = this.analyzeImageCharacteristics(data);
-      isFoil = this.detectFoilCard(imageStats);
-      console.log('Fallback foil detection - Image analysis:', imageStats);
-      console.log('Fallback foil detection - Result:', isFoil);
-    }
-
-    if (isFoil) {
-      // Enhanced processing for foil cards
-      this.processFoilCollectorNumber(data, imageStats);
-      console.log('Applied foil-optimized collector number processing');
-    } else {
-      // Standard processing for normal cards
-      this.processNormalCollectorNumber(data);
-      console.log('Applied standard collector number processing');
-    }
-
-    ctx.putImageData(imageData, 0, 0);
-  }
-
-  // Analyze image characteristics to help detect foil cards
-  analyzeImageCharacteristics(data) {
-    let totalBrightness = 0;
-    let colorVariance = 0;
-    let edgeIntensity = 0;
-    let pixelCount = data.length / 4;
-
-    // Color distribution analysis
-    let brightPixels = 0;
-    let darkPixels = 0;
-    let midtonePixels = 0;
-
-    for (let i = 0; i < data.length; i += 4) {
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-
-      // Calculate grayscale value
-      const gray = 0.299 * r + 0.587 * g + 0.114 * b;
-      totalBrightness += gray;
-
-      // Classify pixels by brightness
-      if (gray > 180) brightPixels++;
-      else if (gray < 75) darkPixels++;
-      else midtonePixels++;
-
-      // Calculate color variance (measure of chromatic content)
-      const avgRGB = (r + g + b) / 3;
-      colorVariance += Math.abs(r - avgRGB) + Math.abs(g - avgRGB) + Math.abs(b - avgRGB);
-    }
-
-    return {
-      averageBrightness: totalBrightness / pixelCount,
-      colorVariance: colorVariance / pixelCount,
-      brightPixelRatio: brightPixels / pixelCount,
-      darkPixelRatio: darkPixels / pixelCount,
-      midtonePixelRatio: midtonePixels / pixelCount
-    };
-  }
-
-  // Detect if this is likely a foil card based on image characteristics
-  detectFoilCard(stats) {
-    // Foil cards typically have:
-    // 1. Higher color variance due to rainbow shimmer
-    // 2. More midtone pixels (less pure black/white contrast)
-    // 3. Higher average brightness in some areas
-
-    const foilIndicators = {
-      highColorVariance: stats.colorVariance > 15, // Threshold may need tuning
-      highMidtoneRatio: stats.midtonePixelRatio > 0.4,
-      lowerContrast: stats.darkPixelRatio < 0.3 && stats.brightPixelRatio < 0.3
-    };
-
-    // Consider it foil if at least 2 indicators are present
-    const foilScore = Object.values(foilIndicators).filter(Boolean).length;
-    return foilScore >= 2;
-  }
-
-  // Enhanced processing specifically for foil cards
-  processFoilCollectorNumber(data, stats) {
-    for (let i = 0; i < data.length; i += 4) {
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-
-      // Convert to grayscale
-      const gray = 0.299 * r + 0.587 * g + 0.114 * b;
-
-      // Adaptive thresholding for foil cards
-      // Use dynamic threshold based on local characteristics
-      let threshold = 128; // Base threshold
-
-      // Adjust threshold based on image characteristics
-      if (stats.averageBrightness > 140) {
-        threshold = 160; // Higher threshold for bright foils
-      } else if (stats.averageBrightness < 100) {
-        threshold = 100; // Lower threshold for dark foils
-      }
-
-      // Apply sigmoid function for smoother transitions
-      const sigmoid = 1 / (1 + Math.exp(-0.1 * (gray - threshold)));
-
-      // Enhanced contrast stretching specifically for foils
-      let enhanced;
-      if (gray > threshold) {
-        // Bright regions: push towards white more aggressively
-        enhanced = 128 + (gray - threshold) * (127 / (255 - threshold)) * 1.8;
-      } else {
-        // Dark regions: push towards black more aggressively
-        enhanced = (gray / threshold) * 128 * 0.6;
-      }
-
-      // Clamp values
-      enhanced = Math.max(0, Math.min(255, enhanced));
-
-      // Invert for OCR (black text on white background)
-      const inverted = 255 - enhanced;
-
-      data[i] = inverted;
-      data[i + 1] = inverted;
-      data[i + 2] = inverted;
-    }
-  }
-
-  // Standard processing for normal (non-foil) cards
-  processNormalCollectorNumber(data) {
-    for (let i = 0; i < data.length; i += 4) {
-      // Convert to grayscale
-      const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-
-      // Standard high contrast enhancement (2.5x factor)
-      const enhanced = Math.max(0, Math.min(255, (gray - 128) * 2.5 + 128));
-
-      // Invert colors: Tesseract works better with black text on white background
-      const inverted = 255 - enhanced;
-
-      data[i] = inverted;
-      data[i + 1] = inverted;
-      data[i + 2] = inverted;
-    }
-  }
-
-
-  // Clean OCR text to handle common issues like duplicated characters
-  cleanOCRText(rawText) {
-    if (!rawText) return '';
-
-    let cleaned = rawText.trim().replace(/\s+/g, ' '); // Normalize whitespace
-
-    // Handle duplicated rarity letters (Cc -> C, Uu -> U, etc.)
-    cleaned = cleaned.replace(/^([CUMNR])\1+/i, '$1'); // Remove duplicates at start
-    cleaned = cleaned.replace(/([CUMNR])\1+/gi, '$1');  // Remove duplicates anywhere
-
-    // Handle duplicated digits (00100 -> 0100, but keep legitimate leading zeros)
-    // Only remove duplicates that create obviously wrong patterns
-    cleaned = cleaned.replace(/(\d)\1{3,}/g, '$1'); // Remove 4+ repeated digits
-
-    // Clean up common OCR mistakes
-    cleaned = cleaned.replace(/[|\\]/g, '1');     // Pipes and backslashes -> 1
-    cleaned = cleaned.replace(/[O]/g, '0');        // Letter O -> number 0
-    cleaned = cleaned.replace(/[Il]/g, '1');       // I, l -> 1
-    cleaned = cleaned.replace(/[S]/g, '5');        // S -> 5 (sometimes)
-
-    // Remove non-alphanumeric except spaces and slashes
-    cleaned = cleaned.replace(/[^0-9A-Za-z\s/]/g, '');
-
-    // Final cleanup
-    cleaned = cleaned.trim().replace(/\s+/g, ' ');
-
-    return cleaned.toUpperCase();
-  }
-
-  // Simplified OCR strategy - automatic detection handles cropping and image processing
-  async performCollectorNumberOCRWithFallback(processedCanvas) {
-    // The canvas we receive has already been automatically cropped and processed
-    console.log('Performing OCR on automatically processed canvas');
-
-    // Store for debugging
-    this.collectorImages = [processedCanvas.toDataURL()];
-
-    try {
-      const ocrResult = await this.performCollectorNumberOCR(processedCanvas);
-
-      // Score both raw and cleaned results
-      const rawScore = this.scoreCollectorNumberResult(ocrResult.rawText);
-      const cleanedScore = this.scoreCollectorNumberResult(ocrResult.cleanedText);
-
-      console.log(`OCR Raw: "${ocrResult.rawText}" (score: ${rawScore})`);
-      console.log(`OCR Cleaned: "${ocrResult.cleanedText}" (score: ${cleanedScore})`);
-
-      // Use the better scoring result
-      const finalText = rawScore > cleanedScore ? ocrResult.rawText : ocrResult.cleanedText;
-      const finalScore = Math.max(rawScore, cleanedScore);
-
-      // Store OCR results in debug data
-      if (this.debugData) {
-        this.debugData.ocrResults = {
-          rawText: ocrResult.rawText,
-          cleanedText: ocrResult.cleanedText,
-          rawScore: rawScore,
-          cleanedScore: cleanedScore,
-          finalText: finalText,
-          finalScore: finalScore,
-          usedRaw: rawScore > cleanedScore
-        };
-      }
-
-      console.log(`Final OCR result: "${finalText}" (score: ${finalScore})`);
-      this.updateStatus(`OCR abgeschlossen`, 90);
-
-      return finalText;
-
-    } catch (error) {
-      console.error('OCR failed:', error.message);
-      throw new Error('OCR-Verarbeitung fehlgeschlagen: ' + error.message);
-    }
-  }
-
-  // Alternative cropping methods removed - automatic detection handles all cropping optimally
-
-  // Score OCR results to pick the best one
-  scoreCollectorNumberResult(text) {
-    if (!text) return 0;
-
-    let score = 0;
-
-    const hasCollectionCode = this.collectionRegex.test(text);
-    const hasRarityCode = /\s[CURMBLST]\s/.test(text);
-    const hasCardNumber = /\d{3,5}/.test(text);
-    const hasLanguageCode = /\b(EN|DE|FR|ES|IT|PT|JP|KO|RU|ZH)\b/.test(text);
-
-    if (hasCollectionCode) {
-      score += 50;
-    }
-
-    if (hasRarityCode) {
-      score += 15;
-    }
-
-    if (hasCardNumber) {
-      score += 30;
-    }
-
-    if (hasLanguageCode) {
-      score += 10;
-    }
-
-    if (text.length > 10) {
-      score += 5;
-    }
-
-    console.log(`Score for "${text}": ${score}`);
-
-    return score;
+    return attempts.slice().sort((a, b) => b.score - a.score);
   }
 
   async performCollectorNumberOCR(canvas) {
@@ -1534,16 +714,14 @@ class MTGScanner {
           this.updateStatus(`Sammlernummer wird erkannt... ${Math.round(m.progress * 100)}%`, progress);
         }
       },
-      //psm: '13',
-      //oem: '3',  // Default
       tessedit_pageseg_mode: '13', // Raw line - treats image as single text line, bypassing hacks
-      tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz /' // Alphanumeric only
+      tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz /*' // Alphanumeric + promo star proxy
     };
 
     try {
       const result = await Tesseract.recognize(canvas, 'eng', ocrConfig); // Always use English for collector numbers
       const rawText = result.data.text || '';
-      const cleanedText = this.cleanOCRText(rawText);
+      const cleanedText = cleanOCRText(rawText);
 
       console.log('Raw OCR result:', `"${rawText}"`);
       console.log('Cleaned OCR result:', `"${cleanedText}"`);
@@ -1556,11 +734,10 @@ class MTGScanner {
     }
   }
 
-
   async searchCardByCollectorNumber(collectorInfo) {
     try {
       // Parse collector number info (e.g., "FDN U 0125" or "U 0125")
-      const parsed = this.parseCollectorNumber(collectorInfo);
+      const parsed = parseCollectorNumber(collectorInfo, this.collectionRegex);
       if (!parsed) {
         console.error('Could not parse collector number:', collectorInfo);
         return null;
@@ -1569,12 +746,13 @@ class MTGScanner {
       const { setCode, collectorNumber, language } = parsed;
       console.log('Parsed collector info:', setCode, collectorNumber, language);
 
-      // Build Scryfall URL with language parameter if detected
-      let apiUrl = `https://api.scryfall.com/cards/${setCode.toLowerCase()}/${parseInt(collectorNumber, 10)}`;
+      // Build Scryfall URL with language parameter if detected. The
+      // collector number is a string (may include a letter suffix or a
+      // promo star), so it's URL-encoded rather than parsed as an integer.
+      let apiUrl = `https://api.scryfall.com/cards/${setCode.toLowerCase()}/${encodeURIComponent(collectorNumber)}`;
 
-      // Add language parameter if we detected a language
       if (language) {
-        const scryfallLang = this.mapLanguageCode(language);
+        const scryfallLang = mapLanguageCode(language);
         apiUrl += `?lang=${scryfallLang}`;
         console.log('Using language-specific API URL:', apiUrl);
       }
@@ -1597,120 +775,15 @@ class MTGScanner {
           collectorNumber: card.collector_number,
           setCode: card.set.toUpperCase(),
           language: language || 'EN', // Store the original detected language code or default to EN
-          languageDisplay: this.getLanguageDisplayName(language || 'EN'),
+          languageDisplay: getLanguageDisplayName(language || 'EN'),
           isFoil: this.lastDetectedFoil || false // Include foil detection result
         };
-      } else if (response.status === 404) {
-        console.log('Card not found with exact lookup, trying fallback search');
-        // Fallback to fuzzy search if exact lookup fails
-        return await this.searchCardFallback(collectorInfo, language);
       }
     } catch (error) {
       console.error('Card search error:', error);
     }
 
     return null;
-  }
-
-  parseCollectorNumber(collectorInfo) {
-    // Clean the input
-    const cleaned = collectorInfo.trim().toUpperCase();
-    console.log('Parsing collector info:', cleaned);
-
-    /* old version that only worked for a specific set
-    const identificationRegex = /(?<cardCode>[CURMBLST])\s*(?<collectionNumber>\d{2,4})\s*(?<collectionCode>[A-Z0-4]{2,4})/
-
-    const match = cleaned.match(identificationRegex);
-    if (match) {
-      const { cardCode, collectionNumber, collectionCode } = match.groups;
-      console.log('Matched collector info:', cardCode, collectionNumber, collectionCode);
-
-      const setCode = collectionCode;
-      const collectorNumber = collectionNumber;
-      return { setCode, collectorNumber };
-    }
-    */
-
-    const cardInfo = {
-      collectorNumber: null,
-      setCode: null,
-      language: null
-    }
-
-    const collectionMatch = this.collectionRegex.exec(cleaned);
-    if (collectionMatch) {
-      const { collection } = collectionMatch.groups;
-      cardInfo.setCode = collection;
-    }
-
-    const numberMatch = /\s*(?<number>\d{3,5})\s*/.exec(cleaned);
-    if (numberMatch) {
-      const { number } = numberMatch.groups;
-      cardInfo.collectorNumber = number;
-    }
-
-    // Extract language code - look for 2-letter language codes like EN, DE, FR, etc.
-    const languageMatch = /\b(?<lang>EN|DE|FR|ES|IT|PT|JP|KO|RU|ZH)\b/.exec(cleaned);
-    if (languageMatch) {
-      const { lang } = languageMatch.groups;
-      cardInfo.language = lang;
-      console.log('Detected language:', lang);
-    }
-
-    if (cardInfo.collectorNumber && cardInfo.setCode) {
-      console.log('Parsed collector info:', cardInfo.setCode, cardInfo.collectorNumber, cardInfo.language);
-      return cardInfo;
-    }
-
-    console.log('Failed to parse collector info:', cleaned);
-    console.log('Matched:', collectionMatch, numberMatch, languageMatch);
-    return null;
-  }
-
-  // Map 2-letter language codes from OCR to Scryfall language codes
-  mapLanguageCode(ocrLanguageCode) {
-    const languageMap = {
-      'EN': 'en',
-      'DE': 'de',
-      'FR': 'fr',
-      'ES': 'es',
-      'IT': 'it',
-      'PT': 'pt',
-      'JP': 'ja',
-      'KO': 'ko',
-      'RU': 'ru',
-      'ZH': 'zhs' // Simplified Chinese for Scryfall
-    };
-    return languageMap[ocrLanguageCode] || 'en'; // Default to English
-  }
-
-  // Get full language name for display
-  getLanguageDisplayName(languageCode) {
-    const displayNames = {
-      'EN': 'English',
-      'DE': 'German',
-      'FR': 'French',
-      'ES': 'Spanish',
-      'IT': 'Italian',
-      'PT': 'Portuguese',
-      'JP': 'Japanese',
-      'KO': 'Korean',
-      'RU': 'Russian',
-      'ZH': 'Chinese'
-    };
-    return displayNames[languageCode] || 'English';
-  }
-
-  guessRecentSet() {
-    // Common recent set codes - this could be made configurable
-    const recentSets = ['FDN', 'DSK', 'BLB', 'OTJ', 'MKM', 'LCI', 'WOE'];
-    return recentSets[0]; // Default to most recent
-  }
-
-  async searchCardFallback(collectorInfo, language = null) {
-    // If exact lookup fails, we could try other approaches
-    console.log('Attempting fallback search for:', collectorInfo, 'with language:', language);
-    return null; // For now, just return null
   }
 
   toggleDebugSection() {
@@ -1778,6 +851,27 @@ class MTGScanner {
       this.modalCardLanguage.style.display = 'none';
     }
 
+    // Confidence badge: shown for MEDIUM/LOW confidence matches only, as a
+    // non-blocking hint - it never gates adding the card to the collection.
+    if (cardData.confidence && cardData.confidence !== 'HIGH') {
+      this.modalConfidenceBadge.textContent = cardData.confidence === 'MEDIUM'
+        ? '⚠️ Mittlere Erkennungssicherheit – bitte prüfen'
+        : '⚠️ Niedrige Erkennungssicherheit – bitte prüfen';
+      this.modalConfidenceBadge.className = `modal-confidence-badge ${cardData.confidence.toLowerCase()}`;
+      this.modalConfidenceBadge.removeAttribute('hidden');
+    } else {
+      this.modalConfidenceBadge.setAttribute('hidden', '');
+    }
+
+    // Manual correction UI for unresolved scans - lets the user fix a
+    // misread collector number instead of hitting a dead end.
+    if (cardData.isUnknown) {
+      this.manualCorrectionSection.removeAttribute('hidden');
+      this.manualCollectorInput.value = recognizedText || '';
+    } else {
+      this.manualCorrectionSection.setAttribute('hidden', '');
+    }
+
     // Show loading state for modal image
     this.modalCardImage.classList.add('loading');
     this.modalCardImage.src = 'data:image/svg+xml;base64,' + btoa(
@@ -1816,6 +910,28 @@ class MTGScanner {
 
   hideCardModal() {
     this.cardModal.setAttribute('hidden', '');
+  }
+
+  // Re-runs the Scryfall lookup against a user-edited collector number,
+  // replacing the "Unbekannte Karte" dead end with a real recovery path.
+  async retryManualCorrection() {
+    const value = this.manualCollectorInput.value.trim();
+    if (!value) {
+      this.showWarning('Bitte eine Sammlernummer eingeben.');
+      return;
+    }
+
+    this.showInfo('Suche...', 1500);
+    const cardData = await this.searchCardByCollectorNumber(value);
+
+    if (cardData) {
+      cardData.confidence = 'HIGH'; // user-confirmed value
+      this.currentCard = cardData;
+      await this.showCardModal(cardData, `Sammlernummer: ${value}`);
+      this.showSuccess(`Karte ${cardData.name} wurde gefunden.`);
+    } else {
+      this.showWarning(`Karte mit Sammlernummer "${value}" wurde nicht gefunden.`);
+    }
   }
 
   toggleFoilStatus() {
@@ -2083,7 +1199,6 @@ class MTGScanner {
       this.renderCollection();
     }
   }
-
 
   exportCollection() {
     // Generate Moxfield-compatible CSV format

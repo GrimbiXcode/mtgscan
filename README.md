@@ -10,7 +10,7 @@ A sophisticated yet simple Magic: The Gathering card scanner that captures cards
 - **📱 Advanced Camera Integration**: Full viewport display with adjustable frame sizing and visual guides
 - **🔢 Language-Independent Recognition**: Uses collector numbers for universal card identification across all MTG languages
 - **🎯 Smart OCR Engine**: Multi-strategy fallback system with specialized foil card detection
-- **✨ Automatic Foil Detection**: AI-powered image analysis to distinguish foil from normal cards
+- **✨ Automatic Foil Detection**: Heuristic image analysis (color variance and brightness distribution) to distinguish foil from normal cards
 - **📸 Upload Support**: Scan existing photos in addition to live camera capture
 - **🔦 Flash Control**: Automatic flash detection and toggle for optimal lighting
 
@@ -89,7 +89,8 @@ Don't have a card handy? Use "📁 Bild hochladen" to test with existing card ph
 mtgscan/
 ├── index.html                    # Main HTML structure with modal support
 ├── src/
-│   └── main.js                   # Core application logic (MTGScanner class)
+│   ├── main.js                   # Core application logic (MTGScanner class)
+│   └── recognition/              # DOM-free recognition pipeline (detection, foil, binarize, parsing, orchestration)
 ├── public/
 │   ├── style.css                 # Responsive styling with foil effects
 │   ├── privacy.html              # Privacy policy (German)
@@ -98,31 +99,26 @@ mtgscan/
 │   └── legal-en.html             # Legal summary (English)
 ├── assets/
 │   └── default-card.png          # Placeholder card image
-├── sandbox/                      # Advanced OCR testing framework
-│   ├── OCR-TESTING.md           # Comprehensive testing guide
-│   ├── OCR_ANALYSIS_SUMMARY.md  # OCR analysis results and recommendations
-│   ├── test-ocr.js              # Basic OCR testing (11 configurations)
-│   ├── test-ocr-advanced.js     # Advanced testing with preprocessing
-│   ├── fetch-card-names.js      # Automatic card name fetching from Scryfall
-│   ├── card-mapping.js          # Card code to name mapping system
-│   └── test-images/             # Curated test image collections
+├── sandbox/                      # Recognition accuracy benchmark
+│   ├── benchmark.js              # End-to-end accuracy benchmark (npm run benchmark)
+│   └── test-images/              # Real card photo fixtures (ground truth in filename)
 ├── .github/
 │   └── FUNDING.yml               # GitHub Sponsors configuration
 ├── Dockerfile                    # Production containerization
 ├── ProductionDockerDeploymentGuide.md # Docker deployment instructions
 ├── vite.config.js                # Vite configuration with HTTPS support
 ├── package.json                  # Dependencies and npm scripts
-└── WARP.md                      # Comprehensive development guide
+└── AGENTS.md                     # Comprehensive development/agent guide
 ```
 
 ### Core Architecture Principles
 
-- **Single Class Design**: Everything contained in `MTGScanner` class (~2,200 lines of focused functionality)
+- **Single Class + Pure Recognition Modules**: UI/app state lives in the `MTGScanner` class; pixel-processing logic lives in DOM-free modules under `src/recognition/` so it's testable from Node
 - **Event-Driven Flow**: Clean separation between UI events, OCR processing, and data management  
 - **Progressive Enhancement**: Works without JavaScript for static legal pages
 - **Mobile-First Responsive**: Optimized for phones with desktop compatibility
 - **Zero Server Dependencies**: Everything runs client-side for privacy and simplicity
-- **Modular OCR Pipeline**: Multiple fallback strategies for robust text recognition
+- **Modular OCR Pipeline**: Multiple crop/binarization variants tried per scan, ranked by OCR plausibility, with fallback to the next-best Scryfall match on a miss
 
 ### File Organization Notes
 
@@ -135,43 +131,45 @@ mtgscan/
 ### 🧪 Multi-Strategy OCR Pipeline
 
 1. **Full Resolution Capture**: High-quality image acquisition from camera or upload
-2. **Intelligent Card Detection**: Smart cropping based on aspect ratio analysis
-3. **Collector Number Region Extraction**: Multiple cropping strategies (optimal, wider, offset)
-4. **Foil Card Detection**: AI-powered image analysis using color variance and brightness patterns
+2. **Adaptive Card-Edge Detection**: Otsu-adaptive threshold + gradient-energy signal, not a single fixed black-pixel threshold, so borderless/extended-art cards and non-ideal lighting are tolerated
+3. **Multiple Detection Variants**: Default crop, a wider crop, a flipped foil-processing path, and (only when the two edge signals disagree) the alternate edge signal - tried in order, ranked by OCR plausibility
+4. **Foil Card Detection**: Heuristic image analysis using color variance and brightness patterns, run on the actual collector-number text strip to decide which binarization branch to use
 5. **Adaptive Image Processing**: 
    - **Normal Cards**: Standard high-contrast enhancement with 2.5x factor
-   - **Foil Cards**: Specialized processing with dynamic thresholding and sigmoid smoothing
-6. **Multi-Attempt OCR**: Fallback system with confidence scoring
-7. **Language-Agnostic Parsing**: Supports all international MTG sets and language codes
+   - **Foil Cards**: Specialized processing with dynamic thresholding
+6. **Multi-Attempt OCR + Fallback Lookup**: Several detection variants scored and tried in order (short-circuiting once confident), then the top 3 ranked candidates tried against Scryfall before giving up
+7. **Language-Agnostic Parsing**: Supports all international MTG sets, 1-5 digit collector numbers with letter suffixes/promo stars, and language codes
 8. **Exact Scryfall Integration**: Direct API calls with language parameter support
 
 ### 💻 Key Code Innovations
 
-**Intelligent Foil Detection:**
+All recognition logic lives in `src/recognition/` as small, DOM-free modules - see [`AGENTS.md`](AGENTS.md) for the full pipeline breakdown. A few representative excerpts:
+
+**Adaptive Edge Detection** (`src/recognition/detection.js`):
 ```javascript
-detectFoilCard(imageStats) {
-    // Foil cards have higher color variance and different brightness patterns
-    const foilIndicators = {
-        highColorVariance: imageStats.colorVariance > 15,
-        highMidtoneRatio: imageStats.midtonePixelRatio > 0.4,
-        lowerContrast: imageStats.darkPixelRatio < 0.3 && imageStats.brightPixelRatio < 0.3
-    };
-    
-    // Foil detected if 2+ indicators present
-    return Object.values(foilIndicators).filter(Boolean).length >= 2;
+// Combines an Otsu-threshold-based edge candidate with a gradient-energy
+// based candidate instead of relying on one fixed black-pixel threshold.
+function combineEdgeCandidates(otsuCandidate, gradientCandidate, fallbackValue, edgeChoice, tolerance = 15) {
+    if (otsuCandidate !== null && gradientCandidate !== null) {
+        if (Math.abs(otsuCandidate - gradientCandidate) <= tolerance) {
+            return { edge: otsuCandidate, confidence: 'high', chosenMethod: 'otsu' };
+        }
+        // Disagreement: prefer Otsu by default, retry gradient as a
+        // separate borderless-card fallback variant.
+        return { edge: otsuCandidate, confidence: 'low', chosenMethod: 'otsu' };
+    }
+    // ...falls back to whichever signal is available, or a fixed guess
 }
 ```
 
-**Adaptive Image Processing:**
+**Foil-Aware Binarization** (`src/recognition/binarize.js`):
 ```javascript
-processCollectorNumberImage(canvas) {
-    const imageStats = this.analyzeImageCharacteristics(imageData.data);
-    const isFoil = this.detectFoilCard(imageStats);
-    
-    if (isFoil) {
-        this.processFoilCollectorNumber(data, imageStats); // Dynamic thresholding
+export function processCollectorNumberImage(canvas, foilDetectionResult) {
+    const { data } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+    if (foilDetectionResult.isFoil) {
+        processFoilCollectorNumber(data, foilDetectionResult.stats); // dynamic thresholding
     } else {
-        this.processNormalCollectorNumber(data); // Standard enhancement
+        processNormalCollectorNumber(data); // standard 2.5x contrast enhancement
     }
 }
 ```
@@ -192,23 +190,20 @@ processCollectorNumberImage(canvas) {
 }
 ```
 
-**Smart OCR Fallback System:**
+**Real Multi-Variant OCR + Fallback Lookup** (`src/main.js`):
 ```javascript
-async performCollectorNumberOCRWithFallback(canvas) {
-    const strategies = [
-        { name: 'optimal', cropFunc: () => this.cropToCollectorNumberArea(canvas) },
-        { name: 'wider', cropFunc: () => this.cropToCollectorNumberAreaWider(canvas) },
-        { name: 'offsetRight', cropFunc: () => this.cropToCollectorNumberAreaOffset(canvas) }
-    ];
-    
-    let bestResult = { text: '', score: 0, strategy: 'none' };
-    for (const strategy of strategies) {
-        const result = await this.performCollectorNumberOCR(strategy.cropFunc());
-        const score = this.scoreCollectorNumberResult(result.cleanedText);
-        if (score > bestResult.score) bestResult = { text: result.cleanedText, score, strategy: strategy.name };
-        if (score >= 80) break; // High confidence, use immediately
+async performCollectorNumberOCRWithFallback(sourceCanvas) {
+    const variants = runDetectionVariants(sourceCanvas); // primary, wider, alt-binarization, edge-disagreement
+    const attempts = [];
+    let best = null;
+    for (const variant of variants) {
+        const ocrResult = await this.performCollectorNumberOCR(variant.result.canvas);
+        const score = /* scored against the parsed set code / rarity / number / language */;
+        attempts.push({ variant: variant.name, text: ocrResult.cleanedText, score });
+        if (!best || score > best.score) best = attempts[attempts.length - 1];
+        if (score >= 80) break; // High confidence, stop trying more variants
     }
-    return bestResult.text;
+    return attempts.sort((a, b) => b.score - a.score); // ranked candidates, tried in order against Scryfall
 }
 ```
 
@@ -247,12 +242,8 @@ npm run build                  # Build optimized production bundle
 npm run preview                # Preview production build locally
 npm run serve                  # Simple Python HTTP server (fallback)
 
-# 🗺️ Advanced OCR Testing Framework
-npm run fetch-cards            # Auto-fetch card names from Scryfall API
-npm run test-ocr               # Run basic OCR tests (11 configurations)
-npm run test-ocr:help          # Show OCR testing help and options
-npm run test-ocr:advanced      # Advanced OCR with image preprocessing
-npm run test-ocr:advanced:help # Advanced OCR testing help
+# 🎯 Recognition Accuracy Benchmark
+npm run benchmark              # Run the end-to-end detection+OCR+parsing benchmark against sandbox/test-images/
 ```
 
 ### Browser Support
@@ -327,11 +318,16 @@ Ask yourself:
 
 ## 📋 Roadmap & Recent Achievements
 
+### ✅ **Recently Completed (2026)**
+- [x] **Adaptive Card-Edge Detection**: Otsu-adaptive threshold + gradient-energy signal instead of a fixed black-pixel threshold, tolerating borderless/extended-art cards and non-ideal lighting
+- [x] **Real Multi-Attempt Recognition**: Several crop/binarization variants tried per scan and ranked by OCR plausibility, with fallback to the next-best Scryfall match on a miss
+- [x] **Recognition Accuracy Benchmark**: `npm run benchmark` measures the real pipeline end-to-end against photo fixtures (superseded the old name-OCR-era testing framework)
+- [x] **Confidence Indicator & Manual Correction**: A non-blocking badge for uncertain matches, and an editable retry field instead of a dead end on a failed lookup
+- [x] **Wider Collector-Number Parsing**: 1-5 digit numbers, letter suffixes, and promo stars
+
 ### ✅ **Recently Completed (2025)**
 - [x] **Multi-Collection System**: Create, manage, and switch between unlimited collections
-- [x] **Intelligent Foil Detection**: AI-powered analysis to distinguish foil from normal cards
-- [x] **Advanced OCR Testing Framework**: 23 configurations tested with comprehensive analysis
-- [x] **Smart Fallback OCR**: Multi-strategy recognition with confidence scoring
+- [x] **Foil Detection**: Heuristic image analysis to distinguish foil from normal cards
 - [x] **Language Detection**: Automatic recognition of card language from collector numbers
 - [x] **Visual Foil Effects**: Modal UI with shimmer effects for foil cards
 - [x] **Docker Production Setup**: Complete containerization with NGINX
@@ -396,7 +392,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Vanilla JavaScript** - Keeping it simple, fast, and dependency-light
 
 ### 🔍 **Research & Testing**
-- **OCR Analysis**: Systematic testing of 23+ configurations to identify optimal settings
+- **Recognition Accuracy Benchmark**: End-to-end detection+OCR+parsing testing against real card photos (`npm run benchmark`)
 - **Foil Detection Research**: Image analysis techniques for distinguishing card finishes
 - **Mobile UX Studies**: Real-world testing on various devices and lighting conditions
 
@@ -425,10 +421,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ### 📚 **Documentation & Help**
 - **README.md** - Complete feature overview (you're reading it!)
-- **WARP.md** - Comprehensive development and architecture guide
+- **AGENTS.md** - Comprehensive development and architecture guide (for humans and coding agents alike)
 - **ProductionDockerDeploymentGuide.md** - Docker deployment instructions
-- **sandbox/OCR-TESTING.md** - Advanced OCR testing framework guide
-- **sandbox/OCR_ANALYSIS_SUMMARY.md** - OCR performance analysis and recommendations
+- **`npm run benchmark`** (`sandbox/benchmark.js`) - Recognition accuracy benchmark against `sandbox/test-images/`
 
 ### ❤️ **Support the Project**
 - **[GitHub Sponsors](https://github.com/sponsors/grimbixcode)** - Support development and maintenance
@@ -440,7 +435,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Be respectful** - We're all here to enjoy MTG and technology
 - **Follow simplicity principle** - Feature requests should enhance core functionality
 - **Provide context** - When reporting issues, include device, browser, and steps to reproduce
-- **Test thoroughly** - Use the OCR testing framework when contributing OCR improvements
+- **Test thoroughly** - Run `npm run benchmark` before and after any change to `src/recognition/*` and check for regressions
 
 ---
 

@@ -197,6 +197,14 @@
                     <div class="modal-card-info">
                         <p id="modalCardSet" class="modal-card-set">Set Name</p>
                         <p id="modalCardLanguage" class="modal-card-language">🌍 Language: <span id="modalLanguageText">English</span></p>
+                        <p id="modalConfidenceBadge" class="modal-confidence-badge" hidden></p>
+
+                        <!-- Manual Correction Section (shown only when the collector number could not be resolved) -->
+                        <div id="manualCorrectionSection" class="manual-correction-section" hidden>
+                            <label for="manualCollectorInput">Sammlernummer korrigieren:</label>
+                            <input type="text" id="manualCollectorInput" placeholder="z.B. U 0125 FDN DE">
+                            <button id="manualRetryBtn" class="btn primary">🔍 Suchen</button>
+                        </div>
 
                         <!-- Foil Toggle Section -->
                         <div class="foil-toggle-section">

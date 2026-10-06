@@ -8,11 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "serve": "python3 -m http.server 8080",
-    "fetch-cards": "node sandbox/fetch-card-names.js",
-    "test-ocr": "node sandbox/test-ocr.js",
-    "test-ocr:help": "node sandbox/test-ocr.js --help",
-    "test-ocr:advanced": "node sandbox/test-ocr-advanced.js",
-    "test-ocr:advanced:help": "node sandbox/test-ocr-advanced.js --help"
+    "benchmark": "NODE_USE_ENV_PROXY=1 node sandbox/benchmark.js"
   },
   "keywords": [
     "mtg",
@@ -24,6 +20,7 @@
   "author": "David Grimbichler (grimbixcode)",
   "license": "GNU GPLv3",
   "devDependencies": {
+    "@tesseract.js-data/eng": "^1.0.0",
     "canvas": "^3.2.0",
     "fuzzyset": "^1.0.7",
     "levenshtein-distance": "^0.0.2",
