@@ -18,16 +18,13 @@
 
                 <h3>Verantwortlich für den Inhalt</h3>
                 <p>
-                    David Grimbichler<br>
-                    c/o F2BII E-Commerce#110<br>
-                    Hintergoldingerstrasse 30<br>
-                    8638 Goldingen<br>
-                    Schweiz
+                    {{LEGAL_OPERATOR_NAME}}<br>
+                    {{LEGAL_OPERATOR_ADDRESS}}
                 </p>
 
                 <h3>Kontakt</h3>
                 <p>
-                    E-Mail: grimbixcode@gmail.com<br>
+                    E-Mail: {{LEGAL_OPERATOR_EMAIL}}<br>
                     Website: <a href="https://github.com/grimbixcode/mtgscan" target="_blank" rel="noopener noreferrer">github.com/grimbixcode/mtgscan</a>
                 </p>
             </section>
@@ -39,7 +36,8 @@
 
             <section>
                 <h2>Technische Realisierung</h2>
-                <p><strong>Hosting:</strong> Statische Website (HTML/CSS/JavaScript)</p>
+                <p><strong>Hosting:</strong> Statische Website (HTML/CSS/JavaScript), betrieben bei:<br>
+                {{LEGAL_OPERATOR_HOSTING}}</p>
                 <p><strong>Externe Services:</strong></p>
                 <ul>
                     <li><strong>Scryfall API:</strong> Karteninformationen - <a href="https://scryfall.com/" target="_blank" rel="noopener">scryfall.com</a></li>

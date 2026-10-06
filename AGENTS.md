@@ -245,6 +245,22 @@ npm run dev
 - Network only for exact Scryfall API lookups
 - Faster recognition due to simpler OCR target (numbers vs stylized text)
 
+### Operator Details in the Legal Pages
+Name, address, email and hoster in `public/imprint.html`, `privacy.html`,
+`terms.html` and `legal-en.html` are not hardcoded - they're
+`{{LEGAL_OPERATOR_*}}` placeholders, filled from the environment with the
+same variables and notation as filahub (see `.env.example`):
+`LEGAL_OPERATOR_NAME`, `LEGAL_OPERATOR_ADDRESS`, `LEGAL_OPERATOR_EMAIL`,
+`LEGAL_OPERATOR_HOSTING`. Line breaks as `\n`; values are HTML-escaped.
+- **Docker/Coolify**: `docker/legal-operator.sh` runs from nginx's
+  `/docker-entrypoint.d/` on every container start - changing a value only
+  needs a restart, not a rebuild.
+- **`vite dev`/`vite preview`**: the `legalOperatorDetails` plugin in
+  `vite.config.js` does the same from the shell environment / `.env`. Keep
+  both renderers in sync.
+- A missing value shows up on the page as `[Angabe fehlt: …]` and is logged
+  at container start.
+
 ### Browser Support
 - Modern browsers with WebRTC camera support
 - Chrome, Safari, Firefox, Edge

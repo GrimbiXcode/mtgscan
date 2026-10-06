@@ -28,6 +28,9 @@ COPY --from=build /app/dist ./
 # Copy static assets (e.g., default-card.png) required by the app
 COPY ./assets ./assets
 COPY ./public ./public
+# Fills in LEGAL_OPERATOR_* (imprint/privacy operator details) from the
+# environment on every container start - see docker/legal-operator.sh
+COPY ./docker/legal-operator.sh /docker-entrypoint.d/40-legal-operator.sh
 
 EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://127.0.0.1/ || exit 1

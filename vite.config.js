@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import fs from 'fs';
 import path from 'path';
 
@@ -41,9 +41,59 @@ function vendorTesseractAssets() {
   };
 }
 
+// Operator details for the legal pages come from LEGAL_OPERATOR_* (same
+// variables and notation as filahub). In the Docker image they're filled in
+// at container start by docker/legal-operator.sh; this does the same for
+// `vite dev`/`vite preview`, reading the shell environment and .env. Keep the
+// two renderers in sync.
+function renderLegalValue(key, raw) {
+  const lines = (raw ?? '')
+    .replace(/\r/g, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/\\+n/g, '\n')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;'));
+  return lines.length
+    ? lines.join('<br>')
+    : `<em class="legal-missing">[Angabe fehlt: ${key}]</em>`;
+}
+
+function legalOperatorDetails() {
+  let env = {};
+  const middleware = (req, res, next) => {
+    const url = (req.url ?? '').split('?')[0];
+    const candidates = [path.resolve('public', '.' + url), path.resolve('dist', '.' + url)];
+    const file = url.endsWith('.html') && candidates.find((f) => fs.existsSync(f));
+    if (!file) return next();
+    const html = fs.readFileSync(file, 'utf-8');
+    if (!html.includes('{{LEGAL_OPERATOR_')) return next();
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.end(html.replace(/\{\{(LEGAL_OPERATOR_[A-Z]+)\}\}/g, (_, key) => renderLegalValue(key, env[key])));
+  };
+
+  return {
+    name: 'legal-operator-details',
+    configResolved(config) {
+      env = { ...loadEnv(config.mode, process.cwd(), 'LEGAL_OPERATOR_'), ...process.env };
+    },
+    configureServer(server) {
+      server.middlewares.use(middleware);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(middleware);
+    }
+  };
+}
+
 export default defineConfig({
   root: '.',
-  plugins: [vendorTesseractAssets()],
+  plugins: [vendorTesseractAssets(), legalOperatorDetails()],
   server: {
     port: 3000,
     host: true, // Allow external connections for mobile testing
