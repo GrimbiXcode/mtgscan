@@ -1,7 +1,6 @@
 # --- Build stage ---
 # Node 20 reached end-of-life in April 2026 and no longer receives security
-# patches; 22 is the current LTS and is also what sharp >=0.35 expects
-# (engines: >=20.9.0).
+# patches; 22 is the current LTS.
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
 

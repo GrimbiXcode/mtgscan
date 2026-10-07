@@ -1,136 +1,39 @@
-// Orchestrates detection + foil-detection + binarization into a single
-// card-region candidate, and generates a small set of alternate candidates
-// (different crop width, flipped foil path, alternate edge signal) so the
-// caller can try OCR against more than one image before giving up.
+// Turns a photo into OCR-ready candidates: the collector-text blocks found
+// by textLocator.js, best first, each cropped from the full-resolution
+// photo and binarized.
 
 import { defaultCreateCanvas } from './canvasUtil.js';
-import {
-  DEFAULT_QUADRANT_FRACTION,
-  cropToLowerLeftQuadrant,
-  findBottomCardEdge,
-  cropToBottomEdge,
-  findLeftCardEdge,
-  cropToLeftEdge,
-  findTextLineBounds,
-  cropToTextArea,
-  copyCanvas,
-} from './detection.js';
-import { performFoilDetection } from './foil.js';
-import { processCollectorNumberImage } from './binarize.js';
+import { locateCollectorTextBlocks, extractCollectorTextRegion, binarizeCollectorText } from './textLocator.js';
 
-export const WIDER_QUADRANT_FRACTION = { x: 0.85, y: 0.85 };
-export const MAX_DETECTION_VARIANTS = 4;
+// The true block ranks first on every fixture at full resolution; the
+// runners-up cover small/distant cards where e.g. the copyright line
+// outranks it.
+export const MAX_CANDIDATES = 3;
 
-// Runs the full detection -> foil-detection -> binarization pipeline once,
-// with no hard-failure path: edge detection always resolves to some edge
-// (falling back to a fixed guess when neither signal finds one), so a
-// canvas is always produced for the caller to attempt OCR against.
-export function detectCardRegion(sourceCanvas, options = {}, createCanvas = defaultCreateCanvas) {
-  const { quadrantFraction = DEFAULT_QUADRANT_FRACTION, forceFoilPath = null, edgeChoice = 'auto' } = options;
-
-  const debug = { steps: [] };
-
-  const quadrantCanvas = cropToLowerLeftQuadrant(sourceCanvas, quadrantFraction, createCanvas);
-  debug.quadrantImage = quadrantCanvas;
-  debug.steps.push({
-    step: 1,
-    name: 'Quadrant Crop',
-    status: 'SUCCESS',
-    size: { width: quadrantCanvas.width, height: quadrantCanvas.height },
+// Downscaled copy of the source with the located blocks outlined (best
+// candidate in red), for the debug panel.
+export function drawLocatorOverview(sourceCanvas, candidates, createCanvas = defaultCreateCanvas) {
+  const scale = Math.min(1, 800 / sourceCanvas.width);
+  const overview = createCanvas(Math.round(sourceCanvas.width * scale), Math.round(sourceCanvas.height * scale));
+  const ctx = overview.getContext('2d');
+  ctx.drawImage(sourceCanvas, 0, 0, overview.width, overview.height);
+  ctx.lineWidth = 3;
+  candidates.forEach((candidate, i) => {
+    const { x, y, width, height } = candidate.bounds;
+    ctx.strokeStyle = i === 0 ? '#ff0000' : '#ffcc00';
+    ctx.strokeRect(x * scale - 4, y * scale - 4, width * scale + 8, height * scale + 8);
   });
-
-  const bottomEdgeResult = findBottomCardEdge(quadrantCanvas, { edgeChoice });
-  const bottomCroppedCanvas = cropToBottomEdge(quadrantCanvas, bottomEdgeResult.edge, createCanvas);
-  debug.bottomCroppedImage = bottomCroppedCanvas;
-  debug.steps.push({
-    step: 2,
-    name: 'Bottom Edge Detection',
-    status: 'SUCCESS',
-    bottomEdge: bottomEdgeResult.edge,
-    confidence: bottomEdgeResult.confidence,
-    size: { width: bottomCroppedCanvas.width, height: bottomCroppedCanvas.height },
-  });
-
-  const leftEdgeResult = findLeftCardEdge(bottomCroppedCanvas, { edgeChoice });
-  const leftCroppedCanvas = cropToLeftEdge(bottomCroppedCanvas, leftEdgeResult.edge, createCanvas);
-  debug.leftCroppedImage = leftCroppedCanvas;
-
-  // Whole-corner foil read: kept as the general foil metadata tag shown to
-  // the user (independent of which binarization branch OCR actually used).
-  const cornerFoilResult = performFoilDetection(leftCroppedCanvas);
-  debug.steps.push({
-    step: 3,
-    name: 'Left Edge Detection',
-    status: 'SUCCESS',
-    leftEdge: leftEdgeResult.edge,
-    confidence: leftEdgeResult.confidence,
-    foilDetected: cornerFoilResult.isFoil,
-    foilStats: cornerFoilResult.stats,
-    size: { width: leftCroppedCanvas.width, height: leftCroppedCanvas.height },
-  });
-
-  const textBounds = findTextLineBounds(leftCroppedCanvas);
-  const textAreaCanvas = cropToTextArea(leftCroppedCanvas, textBounds, createCanvas);
-  debug.textAreaImage = textAreaCanvas;
-
-  // Foil read on the actual OCR strip (not the whole card corner) decides
-  // which binarization branch to use, since that's the region that matters
-  // for OCR quality.
-  const stripFoilResult = performFoilDetection(textAreaCanvas);
-  const binarizeIsFoil = forceFoilPath !== null ? forceFoilPath : stripFoilResult.isFoil;
-
-  const finalCanvas = copyCanvas(textAreaCanvas, createCanvas);
-  processCollectorNumberImage(finalCanvas, { isFoil: binarizeIsFoil, stats: stripFoilResult.stats });
-  debug.finalImage = finalCanvas;
-  debug.steps.push({
-    step: 4,
-    name: 'Text Line Detection & OCR Optimization',
-    status: 'SUCCESS',
-    usedEnhanced: textBounds.usedEnhanced,
-    textBounds,
-    imageProcessingApplied: true,
-    size: { width: finalCanvas.width, height: finalCanvas.height },
-  });
-
-  const edgeConfidence = (bottomEdgeResult.confidence === 'high' && leftEdgeResult.confidence === 'high')
-    ? 'high'
-    : (bottomEdgeResult.confidence === 'none' || leftEdgeResult.confidence === 'none')
-      ? 'none'
-      : 'low';
-
-  return {
-    canvas: finalCanvas,
-    foilDetected: cornerFoilResult.isFoil,
-    binarizeIsFoil,
-    edgeConfidence,
-    bottomEdgeResult,
-    leftEdgeResult,
-    debug,
-  };
+  return overview;
 }
 
-// Builds a small, capped set of detection candidates: the primary (default)
-// crop, a wider crop for imperfect framing, a flipped-foil-path candidate
-// (hedges against a foil misclassification), and — only when the two edge
-// signals disagreed on the primary run — a candidate that explicitly uses
-// the alternate edge signal.
-export function runDetectionVariants(sourceCanvas, createCanvas = defaultCreateCanvas) {
-  const primary = detectCardRegion(sourceCanvas, {}, createCanvas);
-  const variants = [{ name: 'primary', result: primary }];
-
-  const wider = detectCardRegion(sourceCanvas, { quadrantFraction: WIDER_QUADRANT_FRACTION }, createCanvas);
-  variants.push({ name: 'wider', result: wider });
-
-  const altBinarization = detectCardRegion(sourceCanvas, { forceFoilPath: !primary.binarizeIsFoil }, createCanvas);
-  variants.push({ name: 'alt-binarization', result: altBinarization });
-
-  if (primary.edgeConfidence === 'low') {
-    // Try whichever signal the primary run did NOT use, since disagreement
-    // means one of the two is probably right for this particular photo.
-    const otherEdgeChoice = primary.bottomEdgeResult.chosenMethod === 'otsu' ? 'gradient' : 'otsu';
-    const edgeDisagreement = detectCardRegion(sourceCanvas, { edgeChoice: otherEdgeChoice }, createCanvas);
-    variants.push({ name: 'edge-disagreement', result: edgeDisagreement });
+// Lazily yields { name, candidate, region, canvas } per located block, most
+// promising first, so a caller that stops at the first convincing OCR
+// result never pays for cropping the rest. `region` is the colour crop,
+// `canvas` the binarized OCR input.
+export function* generateDetectionVariants(sourceCanvas, createCanvas = defaultCreateCanvas, candidates = null) {
+  const located = candidates ?? locateCollectorTextBlocks(sourceCanvas, { maxCandidates: MAX_CANDIDATES }, createCanvas);
+  for (const [i, candidate] of located.entries()) {
+    const region = extractCollectorTextRegion(sourceCanvas, candidate, createCanvas);
+    yield { name: `located-${i + 1}`, candidate, region, canvas: binarizeCollectorText(region, createCanvas) };
   }
-
-  return variants.slice(0, MAX_DETECTION_VARIANTS);
 }
