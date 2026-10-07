@@ -2,15 +2,14 @@
 
 > ⚠️ **Unofficial Fan Project** • No affiliation with Wizards of the Coast, Magic: The Gathering, or Hasbro • All card data from Scryfall API
 
-A sophisticated yet simple Magic: The Gathering card scanner that captures cards through your device camera, uses advanced OCR to recognize collector numbers, and builds your digital collection with intelligent foil detection and multi-collection management.
+A sophisticated yet simple Magic: The Gathering card scanner that captures cards through your device camera, uses advanced OCR to recognize collector numbers, and builds your digital collection with foil/normal tracking and multi-collection management.
 
 ## ✨ Key Features
 
 ### 🚀 **Core Scanning Technology**
 - **📱 Advanced Camera Integration**: Full viewport display with adjustable frame sizing and visual guides
 - **🔢 Language-Independent Recognition**: Uses collector numbers for universal card identification across all MTG languages
-- **🎯 Smart OCR Engine**: Multi-strategy fallback system with specialized foil card detection
-- **✨ Automatic Foil Detection**: Heuristic image analysis (color variance and brightness distribution) to distinguish foil from normal cards
+- **🎯 Smart OCR Engine**: Finds the collector number anywhere in the photo - hand-held, on a table, in a sleeve - and tries the next-best candidate before giving up
 - **📸 Upload Support**: Scan existing photos in addition to live camera capture
 - **🔦 Flash Control**: Automatic flash detection and toggle for optimal lighting
 
@@ -90,7 +89,7 @@ mtgscan/
 ├── index.html                    # Main HTML structure with modal support
 ├── src/
 │   ├── main.js                   # Core application logic (MTGScanner class)
-│   └── recognition/              # DOM-free recognition pipeline (detection, foil, binarize, parsing, orchestration)
+│   └── recognition/              # DOM-free recognition pipeline (text localization, parsing, orchestration)
 ├── public/
 │   ├── style.css                 # Responsive styling with foil effects
 │   ├── privacy.html              # Privacy policy (German)
@@ -118,7 +117,7 @@ mtgscan/
 - **Progressive Enhancement**: Works without JavaScript for static legal pages
 - **Mobile-First Responsive**: Optimized for phones with desktop compatibility
 - **Zero Server Dependencies**: Everything runs client-side for privacy and simplicity
-- **Modular OCR Pipeline**: Multiple crop/binarization variants tried per scan, ranked by OCR plausibility, with fallback to the next-best Scryfall match on a miss
+- **Modular OCR Pipeline**: Up to 3 located collector-text candidates tried per scan, ranked by OCR plausibility, with fallback to the next-best Scryfall match on a miss
 
 ### File Organization Notes
 
@@ -128,50 +127,24 @@ mtgscan/
 
 ## 🔧 Advanced Technical Features
 
-### 🧪 Multi-Strategy OCR Pipeline
+### 🧪 Collector-Number Pipeline
 
 1. **Full Resolution Capture**: High-quality image acquisition from camera or upload
-2. **Adaptive Card-Edge Detection**: Otsu-adaptive threshold + gradient-energy signal, not a single fixed black-pixel threshold, so borderless/extended-art cards and non-ideal lighting are tolerated
-3. **Multiple Detection Variants**: Default crop, a wider crop, a flipped foil-processing path, and (only when the two edge signals disagree) the alternate edge signal - tried in order, ranked by OCR plausibility
-4. **Foil Card Detection**: Heuristic image analysis using color variance and brightness patterns, run on the actual collector-number text strip to decide which binarization branch to use
-5. **Adaptive Image Processing**: 
-   - **Normal Cards**: Standard high-contrast enhancement with 2.5x factor
-   - **Foil Cards**: Specialized processing with dynamic thresholding
-6. **Multi-Attempt OCR + Fallback Lookup**: Several detection variants scored and tried in order (short-circuiting once confident), then the top 3 ranked candidates tried against Scryfall before giving up
-7. **Language-Agnostic Parsing**: Supports all international MTG sets, 1-5 digit collector numbers with letter suffixes/promo stars, and language codes
-8. **Exact Scryfall Integration**: Direct API calls with language parameter support
+2. **Collector-Text Localization**: The collector info is light text on the card's dark bottom border, so the pipeline looks for exactly that anywhere in the photo: light-on-dark pixels → character-sized blobs → text lines → left-aligned two-line blocks. No assumption about where the card sits, how big it is, or what's behind it
+3. **Crop & Binarize**: The best blocks are cut from the full-resolution photo, scaled to ~48px glyphs and binarized (Otsu, biased towards the text so the bold "B" keeps its counters)
+4. **OCR With Early Exit**: One long-lived Tesseract worker reads the candidates best-first and stops at the first convincing result (usually the first)
+5. **Layout-Aware Parsing**: The set code is the token right before the language code ("BLB • DE"); common OCR swaps there ("BLE" → "BLB") are repaired against the real Scryfall set list. Collector numbers lose their printed leading zeros ("0064" → "64"), as Scryfall expects, and keep letter suffixes/promo stars
+6. **Exact Scryfall Lookup**: The top 3 ranked candidates are tried against Scryfall before an editable correction field is shown
 
 ### 💻 Key Code Innovations
 
 All recognition logic lives in `src/recognition/` as small, DOM-free modules - see [`AGENTS.md`](AGENTS.md) for the full pipeline breakdown. A few representative excerpts:
 
-**Adaptive Edge Detection** (`src/recognition/detection.js`):
+**Light-on-Dark Text Mask** (`src/recognition/textLocator.js`):
 ```javascript
-// Combines an Otsu-threshold-based edge candidate with a gradient-energy
-// based candidate instead of relying on one fixed black-pixel threshold.
-function combineEdgeCandidates(otsuCandidate, gradientCandidate, fallbackValue, edgeChoice, tolerance = 15) {
-    if (otsuCandidate !== null && gradientCandidate !== null) {
-        if (Math.abs(otsuCandidate - gradientCandidate) <= tolerance) {
-            return { edge: otsuCandidate, confidence: 'high', chosenMethod: 'otsu' };
-        }
-        // Disagreement: prefer Otsu by default, retry gradient as a
-        // separate borderless-card fallback variant.
-        return { edge: otsuCandidate, confidence: 'low', chosenMethod: 'otsu' };
-    }
-    // ...falls back to whichever signal is available, or a fixed guess
-}
-```
-
-**Foil-Aware Binarization** (`src/recognition/binarize.js`):
-```javascript
-export function processCollectorNumberImage(canvas, foilDetectionResult) {
-    const { data } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
-    if (foilDetectionResult.isFoil) {
-        processFoilCollectorNumber(data, foilDetectionResult.stats); // dynamic thresholding
-    } else {
-        processNormalCollectorNumber(data); // standard 2.5x contrast enhancement
-    }
-}
+// A pixel counts as collector text if it is clearly brighter than its
+// neighbourhood while that neighbourhood is dark (the card's black border).
+if (mean <= MAX_BACKGROUND && gray[k] - mean >= MIN_CONTRAST) mask[k] = 1;
 ```
 
 **Multi-Collection Architecture:**
@@ -190,18 +163,16 @@ export function processCollectorNumberImage(canvas, foilDetectionResult) {
 }
 ```
 
-**Real Multi-Variant OCR + Fallback Lookup** (`src/main.js`):
+**Best-First OCR + Fallback Lookup** (`src/main.js`):
 ```javascript
 async performCollectorNumberOCRWithFallback(sourceCanvas) {
-    const variants = runDetectionVariants(sourceCanvas); // primary, wider, alt-binarization, edge-disagreement
+    const candidates = locateCollectorTextBlocks(sourceCanvas, { maxCandidates: MAX_CANDIDATES });
     const attempts = [];
-    let best = null;
-    for (const variant of variants) {
-        const ocrResult = await this.performCollectorNumberOCR(variant.result.canvas);
+    for (const variant of generateDetectionVariants(sourceCanvas, undefined, candidates)) {
+        const ocrResult = await this.performCollectorNumberOCR(variant.canvas); // reuses one Tesseract worker
         const score = /* scored against the parsed set code / rarity / number / language */;
         attempts.push({ variant: variant.name, text: ocrResult.cleanedText, score });
-        if (!best || score > best.score) best = attempts[attempts.length - 1];
-        if (score >= 80) break; // High confidence, stop trying more variants
+        if (score >= 80) break; // High confidence, stop trying more candidates
     }
     return attempts.sort((a, b) => b.score - a.score); // ranked candidates, tried in order against Scryfall
 }
@@ -243,7 +214,8 @@ npm run preview                # Preview production build locally
 npm run serve                  # Simple Python HTTP server (fallback)
 
 # 🎯 Recognition Accuracy Benchmark
-npm run benchmark              # Run the end-to-end detection+OCR+parsing benchmark against sandbox/test-images/
+npm run benchmark              # Run the end-to-end localization+OCR+parsing benchmark against sandbox/test-images/
+npm run benchmark -- --max-width=1280   # Same, with fixtures downscaled to camera-like resolution
 ```
 
 ### Browser Support
@@ -319,15 +291,14 @@ Ask yourself:
 ## 📋 Roadmap & Recent Achievements
 
 ### ✅ **Recently Completed (2026)**
-- [x] **Adaptive Card-Edge Detection**: Otsu-adaptive threshold + gradient-energy signal instead of a fixed black-pixel threshold, tolerating borderless/extended-art cards and non-ideal lighting
-- [x] **Real Multi-Attempt Recognition**: Several crop/binarization variants tried per scan and ranked by OCR plausibility, with fallback to the next-best Scryfall match on a miss
+- [x] **Collector-Text Localization**: The collector number is found anywhere in the photo instead of assuming the card fills the frame - 22/22 benchmark fixtures, incl. hand-held, sleeved, foil and table photos (October 2026)
+- [x] **Real Multi-Attempt Recognition**: Several located candidates tried per scan and ranked by OCR plausibility, with fallback to the next-best Scryfall match on a miss
 - [x] **Recognition Accuracy Benchmark**: `npm run benchmark` measures the real pipeline end-to-end against photo fixtures (superseded the old name-OCR-era testing framework)
 - [x] **Confidence Indicator & Manual Correction**: A non-blocking badge for uncertain matches, and an editable retry field instead of a dead end on a failed lookup
 - [x] **Wider Collector-Number Parsing**: 1-5 digit numbers, letter suffixes, and promo stars
 
 ### ✅ **Recently Completed (2025)**
 - [x] **Multi-Collection System**: Create, manage, and switch between unlimited collections
-- [x] **Foil Detection**: Heuristic image analysis to distinguish foil from normal cards
 - [x] **Language Detection**: Automatic recognition of card language from collector numbers
 - [x] **Visual Foil Effects**: Modal UI with shimmer effects for foil cards
 - [x] **Docker Production Setup**: Complete containerization with NGINX
@@ -392,8 +363,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Vanilla JavaScript** - Keeping it simple, fast, and dependency-light
 
 ### 🔍 **Research & Testing**
-- **Recognition Accuracy Benchmark**: End-to-end detection+OCR+parsing testing against real card photos (`npm run benchmark`)
-- **Foil Detection Research**: Image analysis techniques for distinguishing card finishes
+- **Recognition Accuracy Benchmark**: End-to-end localization+OCR+parsing testing against real card photos (`npm run benchmark`)
 - **Mobile UX Studies**: Real-world testing on various devices and lighting conditions
 
 ### 🏆 **Community & Inspiration**

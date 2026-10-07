@@ -1,6 +1,7 @@
 // Simple MTG Scanner - Main Application
 import { cleanOCRText, scoreCollectorNumberResult, parseCollectorNumber, mapLanguageCode, getLanguageDisplayName } from './recognition/parsing.js';
-import { runDetectionVariants } from './recognition/pipeline.js';
+import { generateDetectionVariants, drawLocatorOverview, MAX_CANDIDATES } from './recognition/pipeline.js';
+import { locateCollectorTextBlocks } from './recognition/textLocator.js';
 
 class MTGScanner {
   constructor() {
@@ -8,17 +9,15 @@ class MTGScanner {
     this.canvas = document.getElementById('canvas');
     this.stream = null;
     this.isProcessing = false;
-    this.collectorImages = [];
+    this.ocrWorkerPromise = null;
 
-    // Debug data for automatic detection steps
+    // Debug data of the last scan (see performCollectorNumberOCRWithFallback)
     this.debugData = {
-      originalImage: null,
-      quadrantImage: null,
-      bottomCroppedImage: null,
-      leftCroppedImage: null,
-      textAreaImage: null,
-      finalImage: null,
-      detectionStats: null
+      source: null,
+      candidates: [],
+      winner: null,
+      ocrResults: null,
+      durationMs: 0
     };
 
     this.initElements();
@@ -391,7 +390,9 @@ class MTGScanner {
         this.showResults(cardData, canvas, `Sammlernummer: ${usedCandidate.text}`);
         this.showSuccess(`Karte ${cardData.name} wurde gefunden.`)
       } else {
-        this.showWarning(`Karte mit Sammlernummer "${bestGuessText}" wurde nicht gefunden.`);
+        this.showWarning(bestGuessText
+          ? `Karte mit Sammlernummer "${bestGuessText}" wurde nicht gefunden.`
+          : 'Keine Sammlernummer im Bild gefunden. Karte näher, gerader oder heller fotografieren.');
         // Show results with an editable collector number so the user can
         // correct a misread digit instead of hitting a dead end.
         this.showResults({
@@ -449,145 +450,70 @@ class MTGScanner {
     return canvas;
   }
 
-  // cropToCardFrame method removed - automatic detection handles all cropping
-
-  // Debug display methods for automatic detection steps
+  // Debug display methods for the recognition steps
   updateDebugStats() {
-    if (!this.debugStatsContent || !this.debugData.detectionStats) return;
+    if (!this.debugStatsContent || !this.debugData.source) return;
 
-    const stats = this.debugData.detectionStats;
-    let html = '<div class="debug-stats-content">';
-
-    html += `<div class="debug-stat-item">`;
-    html += `<span class="debug-stat-label">Original Size:</span>`;
-    html += `<span class="debug-stat-value">${stats.originalSize.width}×${stats.originalSize.height}</span>`;
-    html += `</div>`;
-
-    // Show OCR results if available
-    if (this.debugData.ocrResults) {
-      const ocr = this.debugData.ocrResults;
-      html += `<div class="debug-stat-item">`;
-      html += `<span class="debug-stat-label">OCR Final Result:</span>`;
-      html += `<span class="debug-stat-value">"${ocr.finalText}" (${ocr.finalScore})</span>`;
-      html += `</div>`;
-
-      html += `<div class="debug-stat-item">`;
-      html += `<span class="debug-stat-label">  └─ Raw Text:</span>`;
-      html += `<span class="debug-stat-value">"${ocr.rawText}" (${ocr.rawScore})</span>`;
-      html += `</div>`;
-
-      html += `<div class="debug-stat-item">`;
-      html += `<span class="debug-stat-label">  └─ Cleaned Text:</span>`;
-      html += `<span class="debug-stat-value">"${ocr.cleanedText}" (${ocr.cleanedScore})</span>`;
-      html += `</div>`;
-
-      html += `<div class="debug-stat-item">`;
-      html += `<span class="debug-stat-label">  └─ Used Version:</span>`;
-      html += `<span class="debug-stat-value">${ocr.usedRaw ? 'Raw' : 'Cleaned'}</span>`;
-      html += `</div>`;
-
-      if (ocr.usedVariant) {
-        html += `<div class="debug-stat-item">`;
-        html += `<span class="debug-stat-label">  └─ Winning Variant:</span>`;
-        html += `<span class="debug-stat-value">${ocr.usedVariant} (${ocr.attempts?.length || 1} attempt${(ocr.attempts?.length || 1) === 1 ? '' : 's'} tried)</span>`;
-        html += `</div>`;
-      }
+    const { source, candidates, ocrResults, durationMs } = this.debugData;
+    const rows = [
+      ['Original Size', `${source.width}×${source.height}`],
+      ['Gefundene Textblöcke', `${candidates.length}`],
+      ['Dauer Erkennung', `${durationMs} ms`],
+    ];
+    if (ocrResults) {
+      rows.push(['OCR Final Result', `"${ocrResults.finalText}" (${ocrResults.finalScore})`]);
+      rows.push(['  └─ Raw Text', `"${ocrResults.rawText}" (${ocrResults.rawScore})`]);
+      rows.push(['  └─ Cleaned Text', `"${ocrResults.cleanedText}" (${ocrResults.cleanedScore})`]);
+      rows.push(['  └─ Winning Variant', `${ocrResults.usedVariant} (${ocrResults.attempts.length} OCR-Lauf/Läufe)`]);
     }
 
-    stats.steps.forEach(step => {
-      html += `<div class="debug-stat-item">`;
-      html += `<span class="debug-stat-label">Step ${step.step} - ${step.name}:</span>`;
-      html += `<span class="debug-stat-value">${step.status}</span>`;
-      html += `</div>`;
-
-      if (step.size) {
-        html += `<div class="debug-stat-item">`;
-        html += `<span class="debug-stat-label">  └─ Size:</span>`;
-        html += `<span class="debug-stat-value">${step.size.width}×${step.size.height}</span>`;
-        html += `</div>`;
-      }
-
-      if (step.bottomEdge !== undefined) {
-        html += `<div class="debug-stat-item">`;
-        html += `<span class="debug-stat-label">  └─ Bottom Edge:</span>`;
-        html += `<span class="debug-stat-value">${step.bottomEdge}px</span>`;
-        html += `</div>`;
-      }
-
-      if (step.leftEdge !== undefined) {
-        html += `<div class="debug-stat-item">`;
-        html += `<span class="debug-stat-label">  └─ Left Edge:</span>`;
-        html += `<span class="debug-stat-value">${step.leftEdge}px</span>`;
-        html += `</div>`;
-      }
-
-      if (step.confidence) {
-        html += `<div class="debug-stat-item">`;
-        html += `<span class="debug-stat-label">  └─ Edge Confidence:</span>`;
-        html += `<span class="debug-stat-value">${step.confidence}</span>`;
-        html += `</div>`;
-      }
-
-      if (step.textBounds) {
-        html += `<div class="debug-stat-item">`;
-        html += `<span class="debug-stat-label">  └─ Text Area:</span>`;
-        html += `<span class="debug-stat-value">${step.textBounds.height}px high</span>`;
-        html += `</div>`;
-
-        html += `<div class="debug-stat-item">`;
-        html += `<span class="debug-stat-label">  └─ Used enhanced:</span>`;
-        html += `<span class="debug-stat-value">${step.textBounds.usedEnhanced ? 'YES' : 'NO'}</span>`;
-        html += `</div>`;
-      }
-    });
-
-    html += '</div>';
-    this.debugStatsContent.innerHTML = html;
+    // textContent instead of innerHTML: OCR text is untrusted input.
+    const container = document.createElement('div');
+    container.className = 'debug-stats-content';
+    for (const [label, value] of rows) {
+      const item = document.createElement('div');
+      item.className = 'debug-stat-item';
+      const labelEl = document.createElement('span');
+      labelEl.className = 'debug-stat-label';
+      labelEl.textContent = `${label}:`;
+      const valueEl = document.createElement('span');
+      valueEl.className = 'debug-stat-value';
+      valueEl.textContent = value;
+      item.append(labelEl, valueEl);
+      container.append(item);
+    }
+    this.debugStatsContent.replaceChildren(container);
   }
 
-  showQuadrantImage() {
-    if (!this.debugData.quadrantImage) {
+  // Debug images are kept as canvases and only encoded when viewed:
+  // toDataURL() on a 12MP photo costs hundreds of milliseconds per scan.
+  showDebugCanvas(title, canvas, description) {
+    if (!canvas) {
       alert('Führen Sie zuerst einen Scan durch, um Debug-Bilder zu generieren.');
       return;
     }
-    this.displayDebugImage('Quadrant Crop (Schritt 1)', this.debugData.quadrantImage,
-      'Unterer linker Quadrant des ursprünglichen Bildes');
+    this.displayDebugImage(title, canvas.toDataURL(), description);
   }
 
-  showBottomCroppedImage() {
-    if (!this.debugData.bottomCroppedImage) {
-      alert('Führen Sie zuerst einen Scan durch, um Debug-Bilder zu generieren.');
-      return;
-    }
-    this.displayDebugImage('Bottom Edge Detection (Schritt 2)', this.debugData.bottomCroppedImage,
-      'Bild nach Erkennung des unteren Kartenrandes');
+  showCapturedImage() {
+    this.showDebugCanvas('📷 Original', this.debugData.source,
+      'Ursprüngliches Bild vom Kamera-Stream oder hochgeladene Datei');
   }
 
-  showLeftCroppedImage() {
-    if (!this.debugData.leftCroppedImage) {
-      alert('Führen Sie zuerst einen Scan durch, um Debug-Bilder zu generieren.');
-      return;
-    }
-    this.displayDebugImage('Left Edge Detection (Schritt 3)', this.debugData.leftCroppedImage,
-      'Bild nach Erkennung des linken Kartenrandes');
+  showLocatorImage() {
+    const { source, candidates } = this.debugData;
+    this.showDebugCanvas('🔎 Textsuche', source && drawLocatorOverview(source, candidates),
+      'Gefundene Sammlernummer-Kandidaten (rot = bester, gelb = Ausweichkandidaten)');
   }
 
   showTextAreaImage() {
-    if (!this.debugData.textAreaImage) {
-      alert('Führen Sie zuerst einen Scan durch, um Debug-Bilder zu generieren.');
-      return;
-    }
-    this.displayDebugImage('Text Area Detection (Schritt 4)', this.debugData.textAreaImage,
-      'Bild vor der finalen Textbereich-Erkennung');
+    this.showDebugCanvas('📝 Textbereich', this.debugData.winner?.region,
+      'Ausschnitt des verwendeten Kandidaten aus dem Originalbild');
   }
 
   showFinalImage() {
-    if (!this.debugData.finalImage) {
-      alert('Führen Sie zuerst einen Scan durch, um Debug-Bilder zu generieren.');
-      return;
-    }
-    this.displayDebugImage('Final Result', this.debugData.finalImage,
-      'Finales Bild nach automatischer Kartenerkennung - bereit für OCR');
+    this.showDebugCanvas('🎯 Final', this.debugData.winner?.canvas,
+      'Binarisiertes Bild, das an die OCR geht');
   }
 
   displayDebugImage(title, imageDataUrl, description) {
@@ -608,40 +534,28 @@ class MTGScanner {
     this.debugImageDisplay.hidden = true;
   }
 
-  // Runs detection + OCR against a small set of crop/binarization variants
-  // (see runDetectionVariants), scoring each result and returning every
-  // attempt ranked best-first so the caller can retry the next-best
-  // candidate if the top one doesn't resolve to a real card.
+  // Locates collector-text candidates and OCRs them best-first, stopping at
+  // the first convincing result. Returns every attempt ranked best-first so
+  // the caller can retry the next-best one if the top one doesn't resolve
+  // to a real card; an empty list means no text block was found at all.
   async performCollectorNumberOCRWithFallback(sourceCanvas) {
-    const variants = runDetectionVariants(sourceCanvas);
-    const primaryDebug = variants[0].result.debug;
-
+    const startedAt = performance.now();
+    const candidates = locateCollectorTextBlocks(sourceCanvas, { maxCandidates: MAX_CANDIDATES });
     this.debugData = {
-      originalImage: sourceCanvas.toDataURL(),
-      quadrantImage: primaryDebug.quadrantImage.toDataURL(),
-      bottomCroppedImage: primaryDebug.bottomCroppedImage.toDataURL(),
-      leftCroppedImage: primaryDebug.leftCroppedImage.toDataURL(),
-      textAreaImage: primaryDebug.textAreaImage.toDataURL(),
-      finalImage: primaryDebug.finalImage.toDataURL(),
+      source: sourceCanvas,
+      candidates,
+      winner: null,
       ocrResults: null,
-      detectionStats: {
-        originalSize: { width: sourceCanvas.width, height: sourceCanvas.height },
-        steps: primaryDebug.steps
-      }
+      durationMs: 0
     };
-
-    this.lastDetectedFoil = variants[0].result.foilDetected;
-    this.collectorImages = [];
 
     const attempts = [];
     let best = null;
 
-    for (const variant of variants) {
-      this.collectorImages.push(variant.result.canvas.toDataURL());
-
+    for (const variant of generateDetectionVariants(sourceCanvas, undefined, candidates)) {
       let ocrResult;
       try {
-        ocrResult = await this.performCollectorNumberOCR(variant.result.canvas);
+        ocrResult = await this.performCollectorNumberOCR(variant.canvas);
       } catch (error) {
         console.error(`OCR failed for variant "${variant.name}":`, error.message);
         continue;
@@ -668,70 +582,69 @@ class MTGScanner {
 
       if (!best || score > best.score) {
         best = attempts[attempts.length - 1];
-        this.lastDetectedFoil = variant.result.foilDetected;
-        this.debugData.finalImage = variant.result.canvas.toDataURL();
+        this.debugData.winner = variant;
       }
 
-      if (score >= 80) break; // High confidence, stop trying more variants
+      if (score >= 80) break; // High confidence, stop trying more candidates
     }
 
-    if (!best) {
-      throw new Error('OCR-Verarbeitung fehlgeschlagen: kein Ergebnis für alle Varianten');
+    this.debugData.durationMs = Math.round(performance.now() - startedAt);
+    if (best) {
+      this.debugData.ocrResults = {
+        rawText: best.rawText,
+        cleanedText: best.cleanedText,
+        rawScore: best.rawScore,
+        cleanedScore: best.cleanedScore,
+        finalText: best.text,
+        finalScore: best.score,
+        usedRaw: best.usedRaw,
+        usedVariant: best.variant,
+        attempts
+      };
+      console.log(`Final OCR result: "${best.text}" (score: ${best.score}, variant: ${best.variant})`);
+    } else {
+      console.warn('No collector text block found in the image');
     }
 
-    this.debugData.ocrResults = {
-      rawText: best.rawText,
-      cleanedText: best.cleanedText,
-      rawScore: best.rawScore,
-      cleanedScore: best.cleanedScore,
-      finalText: best.text,
-      finalScore: best.score,
-      usedRaw: best.usedRaw,
-      usedVariant: best.variant,
-      attempts
-    };
-
-    console.log(`Final OCR result: "${best.text}" (score: ${best.score}, variant: ${best.variant})`);
     this.updateStatus('OCR abgeschlossen', 90);
     this.updateDebugStats();
 
     return attempts.slice().sort((a, b) => b.score - a.score);
   }
 
-  async performCollectorNumberOCR(canvas) {
-    // Loaded on demand so the Tesseract.js chunk isn't fetched until OCR actually runs
-    const { default: Tesseract } = await import('tesseract.js');
-
-    // OPTIMAL OCR configuration for collector numbers (found via systematic testing)
-    const ocrConfig = {
-      // Self-hosted (same-origin) worker/core assets: the CDN defaults are
-      // blocked by COEP: require-corp once cross-origin isolation is enabled.
-      workerPath: '/tesseract/worker.min.js',
-      corePath: '/tesseract/core',
-      logger: m => {
-        if (m.status === 'recognizing text') {
-          const progress = 80 + (m.progress * 10);
-          this.updateStatus(`Sammlernummer wird erkannt... ${Math.round(m.progress * 100)}%`, progress);
-        }
-      },
-      tessedit_pageseg_mode: '13', // Raw line - treats image as single text line, bypassing hacks
-      tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz /*' // Alphanumeric + promo star proxy
-    };
-
-    try {
-      const result = await Tesseract.recognize(canvas, 'eng', ocrConfig); // Always use English for collector numbers
-      const rawText = result.data.text || '';
-      const cleanedText = cleanOCRText(rawText);
-
-      console.log('Raw OCR result:', `"${rawText}"`);
-      console.log('Cleaned OCR result:', `"${cleanedText}"`);
-
-      return { cleanedText, rawText };
-
-    } catch (error) {
-      console.error('Collector number OCR Error:', error);
-      throw error;
+  // One Tesseract worker for the whole session: creating a worker loads
+  // and initializes the language model, which used to happen again for
+  // every single OCR attempt. Tesseract's default settings are used on
+  // purpose - they read the two-line collector block reliably (see
+  // sandbox/benchmark.js).
+  getOcrWorker() {
+    if (!this.ocrWorkerPromise) {
+      this.ocrWorkerPromise = import('tesseract.js')
+        .then(({ default: Tesseract }) => Tesseract.createWorker('eng', 1, {
+          // Self-hosted (same-origin) worker/core assets: the CDN defaults are
+          // blocked by COEP: require-corp once cross-origin isolation is enabled.
+          workerPath: '/tesseract/worker.min.js',
+          corePath: '/tesseract/core',
+          logger: m => {
+            if (m.status === 'recognizing text') {
+              const progress = 80 + (m.progress * 10);
+              this.updateStatus(`Sammlernummer wird erkannt... ${Math.round(m.progress * 100)}%`, progress);
+            }
+          }
+        }))
+        .catch(error => {
+          this.ocrWorkerPromise = null; // let the next scan retry
+          throw error;
+        });
     }
+    return this.ocrWorkerPromise;
+  }
+
+  async performCollectorNumberOCR(canvas) {
+    const worker = await this.getOcrWorker();
+    const result = await worker.recognize(canvas);
+    const rawText = result.data.text || '';
+    return { rawText, cleanedText: cleanOCRText(rawText) };
   }
 
   async searchCardByCollectorNumber(collectorInfo) {
@@ -776,7 +689,7 @@ class MTGScanner {
           setCode: card.set.toUpperCase(),
           language: language || 'EN', // Store the original detected language code or default to EN
           languageDisplay: getLanguageDisplayName(language || 'EN'),
-          isFoil: this.lastDetectedFoil || false // Include foil detection result
+          isFoil: false // Foil isn't detectable from the photo; the modal has a toggle
         };
       }
     } catch (error) {
@@ -1243,62 +1156,37 @@ class MTGScanner {
     }
   }
 
-  // Download methods for debugging
-  downloadImage(dataUrl, filename) {
-    const link = document.createElement('a');
-    link.href = dataUrl;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }
-
-  showCapturedImage() {
-    if (this.debugData.originalImage) {
-      this.displayDebugImage('📷 Original Image', this.debugData.originalImage,
-        'Ursprüngliches Bild vom Kamera-Stream oder hochgeladene Datei');
-    } else {
-      alert('Führen Sie zuerst einen Scan durch, um Debug-Bilder zu generieren.');
-    }
-  }
-
-  showCardImage() {
-    // Legacy method - redirect to original image since we no longer do manual card cropping
-    this.showCapturedImage();
-  }
-
-  showCollectorImage() {
-    // Legacy method - redirect to final image since this shows the OCR-ready crop
-    this.showFinalImage();
-  }
-
   showOCRResults() {
-    if (!this.debugData.ocrResults) {
+    const ocr = this.debugData.ocrResults;
+    if (!ocr) {
       alert('Führen Sie zuerst einen Scan durch, um OCR-Resultate zu generieren.');
       return;
     }
 
-    const ocr = this.debugData.ocrResults;
+    const attemptLines = ocr.attempts
+      .map(a => `${this.escapeHtml(a.variant)}: "${this.escapeHtml(a.text)}" (${a.score})`)
+      .join('<br>');
     const description = `
-<strong>OCR-Verarbeitung Details:</strong><br><br>
 <strong>Rohtext (Tesseract):</strong><br>
-"${ocr.rawText}"<br>
+"${this.escapeHtml(ocr.rawText)}"<br>
 <em>Bewertung: ${ocr.rawScore} Punkte</em><br><br>
 <strong>Bereinigter Text:</strong><br>
-"${ocr.cleanedText}"<br>
+"${this.escapeHtml(ocr.cleanedText)}"<br>
 <em>Bewertung: ${ocr.cleanedScore} Punkte</em><br><br>
 <strong>Verwendetes Ergebnis:</strong><br>
-"${ocr.finalText}" (${ocr.usedRaw ? 'Rohtext' : 'Bereinigt'})<br>
+"${this.escapeHtml(ocr.finalText)}" (${ocr.usedRaw ? 'Rohtext' : 'Bereinigt'}, ${this.escapeHtml(ocr.usedVariant)})<br>
 <em>Finale Bewertung: ${ocr.finalScore} Punkte</em><br><br>
+<strong>Alle Versuche:</strong><br>
+${attemptLines}<br><br>
 <strong>Bewertungskriterien:</strong><br>
-• Set-Code erkannt: +50 Punkte<br>
-• Seltenheitscode erkannt: +15 Punkte<br>
+• Set-Code vor dem Sprachcode: +50 (korrigiert +45, anderswo +40, nur als Teilstring +20)<br>
 • Kartennummer erkannt: +30 Punkte<br>
+• Seltenheitscode erkannt: +15 Punkte<br>
 • Sprachcode erkannt: +10 Punkte<br>
 • Ausreichende Länge: +5 Punkte
     `;
 
-    this.displayDebugImage('OCR-Resultate & Bewertung', this.debugData.finalImage, description);
+    this.showDebugCanvas('OCR-Resultate & Bewertung', this.debugData.winner?.canvas, description);
   }
 
   // Fetch card image to bypass CORS restrictions

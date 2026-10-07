@@ -14,7 +14,7 @@ A simplified Magic: The Gathering card scanner that focuses on core functionalit
 ### Simplicity First
 - **Clean separation**: HTML structure, CSS styling, app/UI logic, and the recognition pipeline each live in their own place
 - **No complex frameworks**: Vanilla JavaScript with minimal external dependencies
-- **Essential features only**: Card capture → Card Region Detection → Collector Number OCR → Exact API Lookup (with fallback) → Collection management
+- **Essential features only**: Card capture → Collector-Text Localization → Collector Number OCR → Exact API Lookup (with fallback) → Collection management
 
 ### Core Components
 
@@ -25,11 +25,9 @@ mtgscan/
 │   ├── main.js                   # App/UI logic (MTGScanner class): camera, collections, modals
 │   └── recognition/               # Pure, DOM-free recognition pipeline (see below)
 │       ├── canvasUtil.js         # createCanvas() abstraction (browser <canvas> vs. node-canvas)
-│       ├── detection.js          # Card-edge detection (Otsu + gradient) and text-line detection
-│       ├── foil.js               # Foil-card heuristic (color variance / brightness distribution)
-│       ├── binarize.js           # Foil-aware binarization for OCR
+│       ├── textLocator.js        # Finds the collector-text block anywhere in the photo, crops + binarizes it
 │       ├── parsing.js            # OCR text cleanup, scoring, and collector-number parsing
-│       └── pipeline.js           # Orchestrates the above into detectCardRegion / runDetectionVariants
+│       └── pipeline.js           # Orchestrates the above into generateDetectionVariants
 ├── public/
 │   ├── style.css                 # Clean, responsive styling
 │   ├── privacy.html              # Privacy policy (German)
@@ -55,23 +53,25 @@ the exact same code runs in the browser and in Node for `sandbox/benchmark.js`.
 `main.js` imports it and orchestrates capture, UI, and Scryfall lookups
 around it - it does not contain any pixel-processing logic itself.
 
-- `pipeline.js`'s `detectCardRegion(sourceCanvas, options, createCanvas)` runs
-  one full pass: quadrant crop → bottom/left edge detection → foil read →
-  text-line crop → foil-aware binarization → OCR-ready canvas.
-- `runDetectionVariants(sourceCanvas, createCanvas)` runs `detectCardRegion`
-  a handful of times with different options (default crop, a wider crop, a
-  flipped foil path, and - only when the two edge signals disagreed - the
-  alternate edge signal), capped at 4 variants, so the caller can try OCR
-  against more than one candidate image.
-- Edge detection (`detection.js`) combines two independent signals instead of
-  a single fixed black-pixel threshold: an Otsu-adaptive threshold (handles
-  varying lighting) and a gradient-energy profile (handles cards that aren't
-  black-bordered, e.g. borderless/extended-art). They're expected to agree on
-  a normal bordered photo; on disagreement Otsu is preferred by default and
-  the gradient signal is retried as a separate "edge-disagreement" variant.
-- `main.js`'s `performCollectorNumberOCRWithFallback()` runs OCR against each
-  variant (short-circuiting once a result scores ≥80), and `processImage()`
-  tries the top 3 ranked OCR candidates against Scryfall before giving up.
+- `textLocator.js`'s `locateCollectorTextBlocks(sourceCanvas)` finds the
+  collector info without assuming where the card is: it's light text on the
+  card's dark bottom border, so on a ~1000px-wide grayscale copy it marks
+  pixels clearly brighter than their (dark) neighbourhood, takes connected
+  components of character size, groups them into lines and the lines into
+  left-aligned blocks, and ranks blocks so the two-line collector block
+  ("C 0064" / "BLB • DE ✒ ARTIST") wins over stray light-on-dark noise
+  (art highlights, carpet texture, the copyright line). ~100ms per photo.
+- `extractCollectorTextRegion()` crops a block from the full-resolution
+  photo and scales it to ~48px glyphs; `binarizeCollectorText()` turns it
+  into black-on-white with an Otsu threshold biased 30% towards the text
+  (plain Otsu lets the bold font close the counters of "B" → read as "E").
+- `pipeline.js`'s `generateDetectionVariants()` lazily yields up to 3 such
+  candidates, best first, so nothing past the first convincing OCR result
+  is ever cropped.
+- `main.js`'s `performCollectorNumberOCRWithFallback()` OCRs them with one
+  long-lived Tesseract worker (short-circuiting once a result scores ≥80),
+  and `processImage()` tries the top 3 ranked OCR candidates against
+  Scryfall before giving up.
 
 ## Key Features
 
@@ -81,31 +81,21 @@ around it - it does not contain any pixel-processing logic itself.
 - **Environment camera**: Automatically uses back camera on mobile devices
 - **High resolution**: Captures at optimal quality for OCR
 
-### 2. Foil-Aware Collector Number Processing (`src/recognition/binarize.js`)
-```javascript
-// Standard (non-foil) high contrast inversion for collector numbers
-processNormalCollectorNumber(data) {
-    const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-    const enhanced = Math.max(0, Math.min(255, (gray - 128) * 2.5 + 128));
-    const inverted = 255 - enhanced; // white text on dark background -> black on white
-}
-```
-Foil cards go through `processFoilCollectorNumber()` instead, which uses a
-brightness-adaptive threshold rather than the fixed 2.5x curve above - foil
-shimmer needs different handling than a flat print.
+### 2. Collector-Text Localization (`src/recognition/textLocator.js`)
+- Works on hand-held, sleeved, on-the-table and tightly cropped photos alike - no fixed crop region, no card-edge detection
+- Tuning constants (`MIN_CONTRAST`, `MAX_BACKGROUND`, `TARGET_TEXT_HEIGHT`, `CROP_MARGIN`, `THRESHOLD_BIAS`) were picked with `npm run benchmark`, also at `--max-width=1280`/`960` to cover camera-resolution captures
+- Relies on the black card border; white-bordered or borderless cards with light text areas are not covered by fixtures yet
 
-### 3. Adaptive Card-Edge & Text-Line Detection (`src/recognition/detection.js`)
-- **Step 1**: Crop to the lower-left portion of the frame (default 60% width/height; a wider 85% variant is tried when the default crop misses)
-- **Step 2/3**: Find the bottom/left card edge using **both** an Otsu-adaptive threshold and a gradient-energy profile - not a single fixed black-pixel threshold - so borderless/extended-art cards and non-ideal lighting are tolerated. On disagreement, both hypotheses get tried (see `runDetectionVariants`)
-- **Step 4**: Locate the collector-number text line via combined brightness/edge-density/text-pattern heuristics, with a "bottom 15%" fallback if inconclusive
-- **Step 5**: Run foil detection on the actual text strip (not the whole card corner) and binarize accordingly
+### 3. Language-Independent Collector Number OCR
+- Tesseract.js, one worker per session (`getOcrWorker()`), English model only (collector numbers are language-independent)
+- Tesseract's **default** page segmentation reads the two-line block reliably. Note: `Tesseract.recognize(img, lang, options)` only passes `options` to the worker constructor, so the PSM 13/whitelist settings the app used to pass there were never applied - use `worker.setParameters()` if you ever need them
+- Runs against up to 3 located candidates, short-circuiting once a result scores ≥80
 
-### 4. Language-Independent Collector Number OCR
-- Tesseract.js with optimized configuration for collector numbers
-- Always uses English language model (collector numbers are language-independent)
-- PSM mode 13 (raw line) with an alphanumeric + `*` whitelist (the `*` is the closest OCR-recognizable proxy for a promo `★`)
-- Runs against multiple detection variants (see Recognition Pipeline Architecture above), short-circuiting once a result scores ≥80
-- Focuses on extracting format: "SET RARITY NUMBER" (e.g., "FDN U 0125"), now also accepting 1-2 digit numbers and letter suffixes ("150a")
+### 4. Layout-Aware Parsing (`src/recognition/parsing.js`)
+- The set code is taken from the token right before the language code ("BLB • DE"), tested against an **anchored** copy of the Scryfall set regex - the unanchored one matches inside artist names ("CASTANON" → "STA")
+- At that position only, common OCR swaps are repaired against the real set list (`OCR_CONFUSIONS`, e.g. "BLE" → "BLB", "EQE" → "EOE")
+- The collector number is searched before the set code first; printed leading zeros are dropped ("0064" → "64"), because Scryfall 404s on `/cards/blb/0064`
+- The promo star must follow the digits on the same line, so the "•" separator (often read as "*") can't turn "0064" into "0064★"
 
 ### 5. Exact Scryfall API Integration With Fallback
 ```javascript
@@ -116,7 +106,8 @@ async searchCardByCollectorNumber(collectorInfo) {
         `https://api.scryfall.com/cards/${setCode.toLowerCase()}/${encodeURIComponent(collectorNumber)}`
     );
     // Exact match, no fuzzy search needed - collectorNumber is URL-encoded
-    // (not parseInt'd) so letter suffixes and the promo star survive.
+    // (not parseInt'd) so letter suffixes and the promo star survive; the
+    // parser has already dropped printed leading zeros.
 }
 ```
 `processImage()` calls this against the top 3 ranked OCR candidates in
@@ -177,7 +168,7 @@ Start Camera → Position Card → Capture → Detect Region (multi-variant) →
 
 ### Code Style
 - **ES6+ Classes**: App/UI logic lives in the single `MTGScanner` class (`src/main.js`)
-- **Pure functions for recognition**: Pixel-processing logic (detection, foil, binarization, parsing) lives in DOM-free ES modules under `src/recognition/`, imported by `main.js` - keep new recognition logic there rather than adding it back into the class, so it stays usable from `sandbox/benchmark.js`
+- **Pure functions for recognition**: Pixel-processing logic (text localization, binarization, parsing) lives in DOM-free ES modules under `src/recognition/`, imported by `main.js` - keep new recognition logic there rather than adding it back into the class, so it stays usable from `sandbox/benchmark.js`
 - **Async/Await**: For all asynchronous operations
 - **Error Handling**: Try-catch blocks with user feedback
 - **No Global State**: Everything contained in class instance or passed explicitly between recognition functions
@@ -190,8 +181,8 @@ Before adding any new feature, ask:
 4. Will users actually use this?
 
 ### Performance
-- Lazy load Tesseract.js only when needed: `main.js` does `await import('tesseract.js')` on first OCR (npm package, not a CDN script), and the vite `vendorTesseractAssets` plugin copies its worker/core files into `public/tesseract/` so they load same-origin under `COEP: require-corp`; only the English language data still comes from the jsdelivr CDN (fetched via CORS, which COEP allows)
-- Use canvas for image processing
+- Lazy load Tesseract.js only when needed: `main.js` does `import('tesseract.js')` on first OCR (npm package, not a CDN script) and keeps that one worker for the session, and the vite `vendorTesseractAssets` plugin copies its worker/core files into `public/tesseract/` so they load same-origin under `COEP: require-corp`; only the English language data still comes from the jsdelivr CDN (fetched via CORS, which COEP allows)
+- Use canvas for image processing; keep debug images as canvases and only `toDataURL()` them when the debug panel shows them (encoding a 12MP photo costs hundreds of ms)
 - Store collection in localStorage
 - Minimal DOM manipulation
 
@@ -212,7 +203,7 @@ Before adding any new feature, ask:
 
 ### `src/recognition/`
 - DOM-free pure functions and small data objects only - no `document.*` calls
-- Each file has one responsibility (detection / foil / binarize / parsing / orchestration)
+- Each file has one responsibility (text localization / parsing / orchestration)
 - Must stay runnable from both the browser and Node (`sandbox/benchmark.js`)
 
 ### `public/style.css`
@@ -327,18 +318,23 @@ The app now supports multiple collections with full CRUD operations:
 
 ### Testing the Recognition Pipeline
 There is no unit test suite; accuracy is checked with `npm run benchmark`
-(`sandbox/benchmark.js`), which runs the real detection → foil detection →
-binarization → OCR → parsing pipeline in Node against the photos in
+(`sandbox/benchmark.js`), which runs the real localization → binarization →
+OCR → parsing pipeline in Node against the photos in
 `sandbox/test-images/` and checks the parsed set/collector-number against
-each filename's ground truth (`"<rarity> <number> <set> <lang>[ note].jpeg"`).
-It reports both primary-only accuracy and best-of-variants accuracy so a
-regression in the default path is visible even if a fallback variant still
-recovers. **Run it before and after any change to `src/recognition/*`** to
-catch regressions - the current baseline is 7/8 fixtures passing (the one
-failure is a deliberately annotated debug image, not a real-world case).
-The fixture set has no borderless/showcase-frame, foil, low-light, or
-rotated examples yet; add more `.jpeg` files following the naming
-convention above if you need to validate those cases.
+each filename's ground truth (`"<rarity> <number> <set> <lang>[ note].jpeg"`,
+a macOS-style `-1` duplicate suffix is fine). The number is compared
+exactly as it goes to Scryfall (no leading zeros). It reports both
+first-variant and best-of-variants accuracy so a regression in the default
+path is visible even if a fallback candidate still recovers, and uses the
+live Scryfall set list (it needs a custom User-Agent, Scryfall 400s Node's
+default one). **Run it before and after any change to `src/recognition/*`**,
+also with `-- --max-width=1280` (camera-like resolution). Current baseline:
+22/22 at full resolution and at 1280px, 22/22 at 960px (one via the second
+candidate). The fixtures include hand-held, sleeved, table, foil and
+"Breaking News" (OTP) photos, but no white-bordered/borderless cards and no
+low-light shots yet. New fixtures: downscale to a 2048px long side at JPEG
+quality ~85 before committing (keeps the repo small; the benchmark results
+are identical to the 12MP originals).
 
 ### Collection System Implementation
 1. **Initialization Order**: Collections system initializes after DOM elements are ready
@@ -357,7 +353,7 @@ convention above if you need to validate those cases.
 - Share collection link
 
 ### Things to Avoid
-- Heavy new CV/ML dependencies (e.g. OpenCV.js, a bundled model) - the Otsu/gradient edge detection added in July 2026 stayed in scope because it's a few dozen lines of plain canvas math, not a new dependency; weigh future detection improvements the same way
+- Heavy new CV/ML dependencies (e.g. OpenCV.js, a bundled model) - the collector-text localization added in October 2026 stayed in scope because it's plain canvas math (integral image, connected components), not a new dependency; weigh future detection improvements the same way
 - Real-time video processing
 - Multi-language OCR support
 - Fuzzy text matching
@@ -425,6 +421,36 @@ returning `null`, and no automated way to measure accuracy at all.
 **Result:** `npm run benchmark` went from no measurement at all to a
 reproducible 7/8 (88%) baseline on the existing fixtures - re-run it before
 trusting any further change to the recognition pipeline.
+
+## Collector-Text Localization (October 2026)
+
+Real photos (card hand-held or on a table, in a sleeve, not filling the
+frame) failed completely: the July pipeline cropped a fixed lower-left
+quadrant and looked for card edges inside it, which only works when the
+card fills the photo. Measured on new fixtures: 0/8 real-world photos
+recognized. Investigating that also turned up three bugs that hit every
+scan: PSM 13/whitelist never reached Tesseract (wrong API), the
+unanchored set regex picked set codes out of artist names, and leading
+zeros were sent to Scryfall (`/cards/blb/0064` is a 404, so every modern
+card failed the lookup even when OCR was right - the benchmark hid it by
+stripping zeros before comparing).
+
+**What changed:**
+- New `textLocator.js` finds the collector block anywhere in the photo;
+  the fixed-corner pipeline (`detection.js`, `foil.js`, `binarize.js`) was
+  removed - on the fixtures it never recovered a single card the locator
+  missed, and only added OCR runs.
+- Layout-aware set-code parsing with OCR-confusion repair, zero-stripping,
+  and star handling (see Key Features 4).
+- One reused Tesseract worker instead of a new one per OCR attempt.
+- The foil heuristic was removed: it never fired on any fixture, foil or
+  not. Foil status is set with the toggle in the card modal. (On the card,
+  the separator is "★" for foil vs "•" for non-foil - a possible future
+  signal, but OCR reads both as "*" and the star's shape alone wasn't
+  separable from letters on the two foil fixtures.)
+
+**Result:** `npm run benchmark` 7/15 → 22/22, ~0.3s per photo in Node
+(was ~3s), usually with a single OCR run.
 
 ## Lessons Learned
 
