@@ -3,13 +3,90 @@ import { cleanOCRText, scoreCollectorNumberResult, parseCollectorNumber, mapLang
 import { generateDetectionVariants, drawLocatorOverview, MAX_CANDIDATES } from './recognition/pipeline.js';
 import { locateCollectorTextBlocks } from './recognition/textLocator.js';
 
+// UI language names. `languageDisplay` on stored cards stays English
+// ("German"), because the Moxfield CSV export expects English names.
+const LANGUAGE_NAMES_DE = {
+  EN: 'Englisch',
+  DE: 'Deutsch',
+  FR: 'Französisch',
+  ES: 'Spanisch',
+  IT: 'Italienisch',
+  PT: 'Portugiesisch',
+  JP: 'Japanisch',
+  KO: 'Koreanisch',
+  RU: 'Russisch',
+  ZH: 'Chinesisch'
+};
+
+const NOTIFICATION_ICONS = {
+  success: 'i-check-circle',
+  error: 'i-x-circle',
+  warning: 'i-alert',
+  info: 'i-info'
+};
+
+const PROCESSING_STEPS = ['locate', 'ocr', 'lookup'];
+
+// Confidence gauge: how far the arc is filled (see index.html's .gauge path)
+const GAUGE_PATHS = {
+  MEDIUM: 'M4 28A22 22 0 0 1 26 6',
+  LOW: 'M4 28A22 22 0 0 1 10.4 12.4'
+};
+
+const DEFAULT_CARD_IMAGE = '/assets/default-card.png';
+const CAMERA_PREF_KEY = 'mtg-camera-enabled';
+const DEBUG_PREF_KEY = 'mtg-debug-enabled';
+const SET_REGEX_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const MAX_NOTIFICATIONS = 3;
+
+// Lets the browser paint (e.g. the "processing" panel) before a synchronous,
+// CPU-heavy step like the text locator blocks the main thread.
+const nextFrame = () => new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+
+function createIcon(name, className = 'icon') {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', className);
+  svg.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  use.setAttribute('href', `#${name}`);
+  svg.appendChild(use);
+  return svg;
+}
+
+function createElement(tag, className, text) {
+  const el = document.createElement(tag);
+  if (className) el.className = className;
+  if (text !== undefined) el.textContent = text;
+  return el;
+}
+
+function plural(count, singular, pluralForm) {
+  return `${count} ${count === 1 ? singular : pluralForm}`;
+}
+
+function displayName(card) {
+  return card.printedName || card.name;
+}
+
+function csvCell(value) {
+  const text = String(value ?? '');
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
 class MTGScanner {
   constructor() {
-    this.video = document.getElementById('video');
-    this.canvas = document.getElementById('canvas');
     this.stream = null;
     this.isProcessing = false;
     this.ocrWorkerPromise = null;
+    this.flashEnabled = false;
+    this.currentView = 'scan';
+    this.resumeCameraOnScan = false;
+    this.currentCard = null;
+    this.lastScan = null;
+    this.sheetChanged = false;
+    this.searchQuery = '';
+    this.previewScale = 1;
+    this.lastLookupError = null;
 
     // Debug data of the last scan (see performCollectorNumberOCRWithFallback)
     this.debugData = {
@@ -22,185 +99,354 @@ class MTGScanner {
 
     this.initElements();
     this.initEventListeners();
-    // Frame size initialization removed - using automatic detection
 
-    // Initialize collections system after elements are ready
     this.initCollections();
     this.migrateExistingCollection();
     this.loadActiveCollection();
-    this.migrateFoilStatus(); // Migrate foil status after cards are loaded
+    this.migrateFoilStatus();
+    this.purgeLegacyImageCache();
+    this.updateCollectionDisplay();
     this.updateCardCount();
     this.renderCollection();
-    this.initCollectionRecognitions();
+    this.renderCollectionsList();
+    this.collectionRegexReady = this.initCollectionRecognitions();
 
-    // Initialize UI state (camera stopped by default)
-    this.hideCameraUI();
+    this.restoreDebugPreference();
+    this.setStageState('idle');
+    this.updateCaptureButton();
+    this.autoStartCamera();
   }
 
   initElements() {
-    this.startCameraBtn = document.getElementById('startCamera');
-    this.captureCardBtn = document.getElementById('captureCard');
-    this.stopCameraBtn = document.getElementById('stopCamera');
-    this.flashToggleBtn = document.getElementById('flashToggle');
-    this.uploadCardBtn = document.getElementById('uploadCard');
-    this.fileInput = document.getElementById('fileInput');
+    const $ = id => document.getElementById(id);
 
-    // New UI elements for improved visibility control
-    this.cameraContainer = document.getElementById('cameraContainer');
-    this.cameraOperationControls = document.getElementById('cameraOperationControls');
-    this.alignmentInstructions = document.getElementById('alignmentInstructions');
+    // Navigation
+    this.views = {
+      scan: $('scanView'),
+      collection: $('collectionView'),
+      workshop: $('workshopView')
+    };
+    this.tabs = [...document.querySelectorAll('.tab[data-view]')];
 
-    this.processingSection = document.getElementById('processingSection');
-    this.progressBar = document.getElementById('progressBar');
-    this.statusText = document.getElementById('statusText');
+    // Scan view
+    this.video = $('video');
+    this.stage = $('stage');
+    this.stagePreview = $('stagePreview');
+    this.captureCardBtn = $('captureCard');
+    this.captureLabel = $('captureLabel');
+    this.stopCameraBtn = $('stopCamera');
+    this.flashToggleBtn = $('flashToggle');
+    this.uploadCardBtn = $('uploadCard');
+    this.fileInput = $('fileInput');
+    this.manualEntryBtn = $('manualEntry');
 
-    // Debug section toggle
-    this.debugSection = document.getElementById('debugSection');
-    this.toggleDebugBtn = document.getElementById('toggleDebug');
-    this.debugStatsContent = document.getElementById('debugStatsContent');
-    this.debugImageInfo = document.getElementById('debugImageInfo');
-    this.debugImage = document.getElementById('debugImage');
-    this.debugImageDisplay = document.getElementById('debugImageDisplay');
-    this.debugImageTitle = document.getElementById('debugImageTitle');
+    this.processingSection = $('processingSection');
+    this.progressBar = $('progressBar');
+    this.progressTrack = this.progressBar.parentElement;
+    this.statusText = $('statusText');
+    this.stepItems = [...this.processingSection.querySelectorAll('.step')];
 
-    this.cardCount = document.getElementById('cardCount');
-    this.cardList = document.getElementById('cardList');
-    this.exportCollectionBtn = document.getElementById('exportCollection');
-    this.clearCollectionBtn = document.getElementById('clearCollection');
+    this.lastScanPanel = $('lastScan');
+    this.lastScanImage = $('lastScanImage');
+    this.lastScanName = $('lastScanName');
+    this.lastScanMeta = $('lastScanMeta');
+    this.lastScanOpenBtn = $('lastScanOpen');
 
-    // Notification system
-    this.notificationContainer = document.getElementById('notificationContainer');
+    // Collection view
+    this.currentCollectionName = $('currentCollectionName');
+    this.cardCount = $('cardCount');
+    this.cardList = $('cardList');
+    this.collectionSearch = $('collectionSearch');
+    this.collectionToolbar = this.collectionSearch.closest('.toolbar');
+    this.collectionEmpty = $('collectionEmpty');
+    this.searchEmpty = $('searchEmpty');
+    this.exportCollectionBtn = $('exportCollection');
+    this.clearCollectionBtn = $('clearCollection');
 
-    // Modal elements
-    this.cardModal = document.getElementById('cardModal');
-    this.modalCardName = document.getElementById('modalCardName');
-    this.modalCardImage = document.getElementById('modalCardImage');
-    this.modalCardSet = document.getElementById('modalCardSet');
-    this.modalCardLanguage = document.getElementById('modalCardLanguage');
-    this.modalLanguageText = document.getElementById('modalLanguageText');
-    this.currentQuantity = document.getElementById('currentQuantity');
-    this.previousQuantity = document.getElementById('previousQuantity');
-    this.previousQuantityInfo = document.getElementById('previousQuantityInfo');
-    this.increaseQuantityBtn = document.getElementById('increaseQuantity');
-    this.decreaseQuantityBtn = document.getElementById('decreaseQuantity');
-    this.modalCloseBtn = document.getElementById('modalCloseBtn');
-    this.backToScannerBtn = document.getElementById('backToScannerBtn');
+    // Header collection switcher
+    this.collectionSelect = $('collectionSelect');
 
-    // Foil toggle elements
-    this.foilToggleBtn = document.getElementById('foilToggleBtn');
-    this.foilToggleText = document.getElementById('foilToggleText');
+    // Workshop view
+    this.createCollectionForm = $('createCollectionForm');
+    this.newCollectionName = $('newCollectionName');
+    this.collectionsList = $('collectionsList');
+    this.toggleDebugBtn = $('toggleDebug');
+    this.debugSection = $('debugSection');
+    this.debugStatsContent = $('debugStatsContent');
+    this.debugImageDisplay = $('debugImageDisplay');
+    this.debugImageTitle = $('debugImageTitle');
+    this.debugImageInfo = $('debugImageInfo');
+    this.debugImage = $('debugImage');
+    this.debugImageCloseBtn = $('debugImageClose');
 
-    // Confidence badge & manual correction elements
-    this.modalConfidenceBadge = document.getElementById('modalConfidenceBadge');
-    this.manualCorrectionSection = document.getElementById('manualCorrectionSection');
-    this.manualCollectorInput = document.getElementById('manualCollectorInput');
-    this.manualRetryBtn = document.getElementById('manualRetryBtn');
+    // Notifications
+    this.notificationContainer = $('notificationContainer');
 
-    // Collection management elements
-    this.currentCollectionName = document.getElementById('currentCollectionName');
-    this.collectionSelect = document.getElementById('collectionSelect');
-    this.manageCollectionsBtn = document.getElementById('manageCollectionsBtn');
+    // Card sheet
+    this.cardModal = $('cardModal');
+    this.modalCloseBtn = $('modalCloseBtn');
+    this.sheetFound = $('sheetFound');
+    this.modalCardImage = $('modalCardImage');
+    this.modalCardName = $('sheetTitle');
+    this.modalCardSet = $('modalCardSet');
+    this.modalCardLanguage = $('modalCardLanguage');
+    this.modalCollectorNumber = $('modalCollectorNumber');
+    this.modalConfidenceBadge = $('modalConfidenceBadge');
+    this.confidenceTitle = $('confidenceTitle');
+    this.confidenceGauge = $('confidenceGauge');
+    this.confidenceFixBtn = $('confidenceFix');
+    this.finishNormalBtn = $('finishNormal');
+    this.finishFoilBtn = $('finishFoil');
+    this.currentQuantity = $('currentQuantity');
+    this.previousQuantity = $('previousQuantity');
+    this.quantityDelta = $('quantityDelta');
+    this.increaseQuantityBtn = $('increaseQuantity');
+    this.decreaseQuantityBtn = $('decreaseQuantity');
+    this.sheetPrimaryBtn = $('backToScannerBtn');
+    this.sheetPrimaryLabel = $('sheetPrimaryLabel');
 
-    // Collection modal elements
-    this.collectionModal = document.getElementById('collectionModal');
-    this.collectionModalCloseBtn = document.getElementById('collectionModalCloseBtn');
-    this.newCollectionName = document.getElementById('newCollectionName');
-    this.createCollectionBtn = document.getElementById('createCollectionBtn');
-    this.collectionsList = document.getElementById('collectionsList');
+    // Correction (inside the card sheet)
+    this.manualCorrectionSection = $('manualCorrectionSection');
+    this.correctionTitle = $('correctionTitle');
+    this.correctionText = $('correctionText');
+    this.correctionPreview = $('correctionPreview');
+    this.correctionPreviewImage = $('correctionPreviewImage');
+    this.correctionTried = $('correctionTried');
+    this.manualCorrectionForm = $('manualCorrectionForm');
+    this.manualCollectorInput = $('manualCollectorInput');
+    this.manualError = $('manualError');
+    this.manualRetryBtn = $('manualRetryBtn');
+    this.correctionRescanBtn = $('correctionRescan');
+
+    // Confirm dialog
+    this.confirmDialog = $('confirmDialog');
+    this.confirmTitle = $('confirmTitle');
+    this.confirmMessage = $('confirmMessage');
+    this.confirmInputWrap = $('confirmInputWrap');
+    this.confirmInputLabel = $('confirmInputLabel');
+    this.confirmInput = $('confirmInput');
+    this.confirmOkBtn = $('confirmOk');
   }
 
   initEventListeners() {
-    this.startCameraBtn.addEventListener('click', () => this.startCamera());
-    this.captureCardBtn.addEventListener('click', () => this.captureCard());
+    // Navigation
+    for (const tab of this.tabs) {
+      tab.addEventListener('click', () => this.showView(tab.dataset.view));
+    }
+    document.querySelectorAll('[data-goto]').forEach(button => {
+      button.addEventListener('click', () => this.showView(button.dataset.goto));
+    });
+
+    // Scanning
+    this.captureCardBtn.addEventListener('click', () => {
+      if (this.stream) {
+        this.captureCard();
+      } else {
+        this.startCamera();
+      }
+    });
     this.stopCameraBtn.addEventListener('click', () => this.stopCamera());
     this.flashToggleBtn.addEventListener('click', () => this.toggleFlash());
-    this.uploadCardBtn.addEventListener('click', () => this.triggerFileUpload());
+    this.uploadCardBtn.addEventListener('click', () => this.fileInput.click());
     this.fileInput.addEventListener('change', (e) => this.handleFileUpload(e));
+    this.manualEntryBtn.addEventListener('click', () => this.showCorrection({ mode: 'manual' }));
+    this.lastScanOpenBtn.addEventListener('click', () => {
+      if (this.lastScan) this.openCardSheet(this.lastScan, { reopened: true });
+    });
 
-    // Debug toggle
-    if (this.toggleDebugBtn) {
-      this.toggleDebugBtn.addEventListener('click', () => this.toggleDebugSection());
-    }
+    // Don't keep the camera (and its light) running in a background tab
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && this.stream) {
+        this.stopCamera({ remember: false });
+        this.resumeCameraOnScan = true;
+      } else if (!document.hidden && this.resumeCameraOnScan && this.currentView === 'scan') {
+        this.resumeCameraOnScan = false;
+        this.startCamera();
+      }
+    });
 
+    // Collection view
+    this.collectionSearch.addEventListener('input', () => {
+      this.searchQuery = this.collectionSearch.value;
+      this.renderCollection();
+    });
+    this.cardList.addEventListener('click', (e) => this.onCardListClick(e));
     this.exportCollectionBtn.addEventListener('click', () => this.exportCollection());
     this.clearCollectionBtn.addEventListener('click', () => this.clearCollection());
-
-    // Modal event listeners
-    this.increaseQuantityBtn.addEventListener('click', () => this.increaseCardQuantity());
-    this.decreaseQuantityBtn.addEventListener('click', () => this.decreaseCardQuantity());
-    this.modalCloseBtn.addEventListener('click', () => this.hideCardModal());
-    this.backToScannerBtn.addEventListener('click', () => this.hideCardModal());
-    this.foilToggleBtn.addEventListener('click', () => this.toggleFoilStatus());
-    this.manualRetryBtn.addEventListener('click', () => this.retryManualCorrection());
-
-    // Close modal when clicking overlay
-    this.cardModal.addEventListener('click', (e) => {
-      if (e.target === this.cardModal) {
-        this.hideCardModal();
-      }
-    });
-
-    // Collection management event listeners
-    this.manageCollectionsBtn.addEventListener('click', () => this.showCollectionModal());
-    this.collectionModalCloseBtn.addEventListener('click', () => this.hideCollectionModal());
-    this.createCollectionBtn.addEventListener('click', () => this.createNewCollection());
     this.collectionSelect.addEventListener('change', (e) => this.switchToCollection(e.target.value));
 
-    // Enter key for creating collections
-    this.newCollectionName.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && this.newCollectionName.value.trim()) {
-        this.createNewCollection();
-      }
+    // Workshop view
+    this.createCollectionForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      this.createNewCollection();
     });
+    this.collectionsList.addEventListener('click', (e) => this.onCollectionsListClick(e));
+    this.toggleDebugBtn.addEventListener('click', () => this.toggleDebugSection());
+    this.debugSection.addEventListener('click', (e) => {
+      const button = e.target.closest('[data-debug]');
+      if (button) this.showDebugView(button.dataset.debug);
+    });
+    this.debugImageCloseBtn.addEventListener('click', () => this.hideDebugImage());
 
-    // Close collection modal when clicking overlay
-    this.collectionModal.addEventListener('click', (e) => {
-      if (e.target === this.collectionModal) {
-        this.hideCollectionModal();
-      }
+    // Card sheet
+    this.modalCloseBtn.addEventListener('click', () => this.hideCardModal());
+    this.sheetPrimaryBtn.addEventListener('click', () => this.confirmCardSheet());
+    this.finishNormalBtn.addEventListener('click', () => this.setFoilStatus(false));
+    this.finishFoilBtn.addEventListener('click', () => this.setFoilStatus(true));
+    this.increaseQuantityBtn.addEventListener('click', () => this.increaseCardQuantity());
+    this.decreaseQuantityBtn.addEventListener('click', () => this.decreaseCardQuantity());
+    this.confidenceFixBtn.addEventListener('click', () => {
+      if (!this.currentCard) return;
+      this.showCorrection({
+        mode: 'fix',
+        text: this.currentCard.recognizedText || '',
+        region: this.currentCard.scanRegion
+      });
     });
+    this.manualCorrectionForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      this.retryManualCorrection();
+    });
+    this.correctionRescanBtn.addEventListener('click', () => {
+      this.hideCardModal();
+      if (!this.stream) this.startCamera();
+    });
+    this.modalCardImage.addEventListener('error', () => {
+      if (!this.modalCardImage.src.endsWith(DEFAULT_CARD_IMAGE)) this.modalCardImage.src = DEFAULT_CARD_IMAGE;
+    });
+    this.cardModal.addEventListener('close', () => this.onCardSheetClosed());
+
+    // Clicking the dimmed backdrop closes a dialog
+    for (const dialog of [this.cardModal, this.confirmDialog]) {
+      dialog.addEventListener('click', (e) => {
+        if (e.target !== dialog) return;
+        const rect = dialog.getBoundingClientRect();
+        const outside = e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom;
+        if (outside) dialog.close('cancel');
+      });
+    }
   }
 
-  // Remove frame size controls - no longer needed with automatic detection
+  // ---------- Preferences ----------
 
-  initCollectionRecognitions() {
-    this.collectionRegex;
+  loadPreference(key) {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  }
 
-    // load collection regex from local storage
-    const collectionRegexTimestamp = localStorage.getItem('collectionRegexTimestamp');
-    if (collectionRegexTimestamp && Date.now() - parseInt(collectionRegexTimestamp) < 24 * 60 * 60 * 1000) {
-      const collectionRegexSource = localStorage.getItem('collectionRegex');
-      if (collectionRegexSource) {
-        this.collectionRegex = new RegExp(collectionRegexSource);
-        console.log('Collection Regex loaded from local storage.');
-        console.log(this.collectionRegex);
-        return
+  savePreference(key, value) {
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      // Preferences are a convenience - ignore a full or blocked storage
+    }
+  }
+
+  // ---------- Navigation ----------
+
+  showView(name) {
+    if (!this.views[name]) return;
+
+    for (const [viewName, element] of Object.entries(this.views)) {
+      element.hidden = viewName !== name;
+    }
+    for (const tab of this.tabs) {
+      if (tab.dataset.view === name) {
+        tab.setAttribute('aria-current', 'page');
       } else {
-        console.warn('Collection Regex not found in local storage.');
-        console.warn('Loading collections from scryfall...');
+        tab.removeAttribute('aria-current');
       }
     }
 
-    // load all collections from scryfall
-    fetch('https://api.scryfall.com/sets?order=set&dir=asc&format=json')
-    .then(response => response.json())
-    .then(data => {
-      console.log(data);
+    // The camera only runs while the scanner is visible
+    if (name !== 'scan' && this.stream) {
+      this.stopCamera({ remember: false });
+      this.resumeCameraOnScan = true;
+    } else if (name === 'scan' && this.resumeCameraOnScan) {
+      this.resumeCameraOnScan = false;
+      this.startCamera();
+    }
+
+    if (name === 'workshop') this.renderCollectionsList();
+
+    this.currentView = name;
+    window.scrollTo(0, 0);
+  }
+
+  // ---------- Set list (for parsing set codes) ----------
+
+  // Resolves once the Scryfall set-code regex is available. Uses a cached
+  // copy (refreshed daily) and falls back to a stale one when offline.
+  async initCollectionRecognitions() {
+    const cachedSource = this.loadPreference('collectionRegex');
+    const cachedAt = parseInt(this.loadPreference('collectionRegexTimestamp') || '0', 10);
+
+    if (cachedSource && Date.now() - cachedAt < SET_REGEX_MAX_AGE_MS) {
+      this.collectionRegex = new RegExp(cachedSource);
+      return;
+    }
+
+    try {
+      const response = await fetch('https://api.scryfall.com/sets?order=set&dir=asc&format=json');
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
       const codes = data.data.map(set => set.code.toUpperCase());
       this.collectionRegex = new RegExp(`(?<collection>${codes.join('|')})`);
-      console.log(`Collection Regex generated. Found ${codes.length} collections.`);
-      console.log(this.collectionRegex);
+      console.log(`Set regex generated from ${codes.length} sets.`);
+      this.savePreference('collectionRegex', this.collectionRegex.source);
+      this.savePreference('collectionRegexTimestamp', Date.now().toString());
+    } catch (error) {
+      console.error('Error fetching sets:', error);
+      if (cachedSource) {
+        this.collectionRegex = new RegExp(cachedSource);
+      }
+    }
+  }
 
-      // save it to local storage
-      localStorage.setItem('collectionRegex', this.collectionRegex.source);
-      localStorage.setItem('collectionRegexTimestamp', Date.now().toString());
-      console.log('Collection Regex saved to local storage.');
-    })
-    .catch(error => console.error('Error fetching collections:', error));
+  // ---------- Camera ----------
 
+  setStageState(state) {
+    this.stage.dataset.state = state;
+  }
+
+  updateCaptureButton() {
+    const live = Boolean(this.stream);
+    const label = live ? 'Scannen' : 'Kamera starten';
+    this.captureCardBtn.setAttribute('aria-label', live ? 'Karte scannen' : 'Kamera starten');
+    this.captureCardBtn.querySelector('.icon use').setAttribute('href', live ? '#i-scan' : '#i-camera');
+    this.captureLabel.textContent = label;
+
+    const busy = this.isProcessing;
+    this.captureCardBtn.disabled = busy;
+    this.uploadCardBtn.disabled = busy;
+    this.manualEntryBtn.disabled = busy;
+  }
+
+  async autoStartCamera() {
+    // Only if the user had the camera on last time and the browser already
+    // granted access - never trigger a permission prompt on page load.
+    if (this.loadPreference(CAMERA_PREF_KEY) !== '1' || !navigator.permissions?.query) return;
+    try {
+      const status = await navigator.permissions.query({ name: 'camera' });
+      if (status.state === 'granted' && this.currentView === 'scan') {
+        await this.startCamera();
+      }
+    } catch {
+      // Permissions API without "camera" (e.g. Firefox) - user starts it manually
+    }
   }
 
   async startCamera() {
+    if (this.stream) return;
+    if (!navigator.mediaDevices?.getUserMedia) {
+      this.showError('Dieser Browser erlaubt keinen Kamerazugriff. Lade stattdessen ein Foto hoch.');
+      return;
+    }
+
+    this.captureCardBtn.disabled = true;
     try {
       this.stream = await navigator.mediaDevices.getUserMedia({
         video: {
@@ -210,201 +456,215 @@ class MTGScanner {
         }
       });
 
+      // The user may have left the scanner while the permission prompt was open
+      if (this.currentView !== 'scan') {
+        this.stopCamera({ remember: false });
+        this.resumeCameraOnScan = true;
+        return;
+      }
+
       this.video.srcObject = this.stream;
-
-      // Check for flash capability
+      await this.video.play().catch(() => {});
+      this.setStageState('live');
+      this.savePreference(CAMERA_PREF_KEY, '1');
       await this.checkFlashCapability();
-
-      // Update button states
-      this.startCameraBtn.disabled = true;
-      this.captureCardBtn.disabled = false;
-      this.stopCameraBtn.disabled = false;
-
-      // Show camera-related UI elements
-      this.showCameraUI();
-
     } catch (error) {
-      this.showError('Kamera konnte nicht gestartet werden: ' + error.message);
+      this.stream = null;
+      if (error.name === 'NotAllowedError') {
+        this.savePreference(CAMERA_PREF_KEY, '0');
+        this.showError('Kamerazugriff wurde verweigert. Erlaube ihn in den Browser-Einstellungen oder lade ein Foto hoch.', 8000);
+      } else if (error.name === 'NotFoundError' || error.name === 'OverconstrainedError') {
+        this.showError('Keine passende Kamera gefunden. Lade stattdessen ein Foto hoch.');
+      } else {
+        this.showError('Kamera konnte nicht gestartet werden: ' + error.message);
+      }
+    } finally {
+      this.updateCaptureButton();
     }
   }
 
-  stopCamera() {
+  stopCamera({ remember = true } = {}) {
     if (this.stream) {
       this.stream.getTracks().forEach(track => track.stop());
       this.stream = null;
     }
+    this.video.srcObject = null;
+    this.flashEnabled = false;
+    this.flashToggleBtn.hidden = true;
+    this.updateFlashButton();
 
-    // Update button states
-    this.startCameraBtn.disabled = false;
-    this.captureCardBtn.disabled = true;
-    this.stopCameraBtn.disabled = true;
-
-    // Hide camera-related UI elements
-    this.hideCameraUI();
-  }
-
-  showCameraUI() {
-    // Show camera container and controls when camera is running
-    this.cameraContainer.removeAttribute('hidden');
-    this.cameraOperationControls.removeAttribute('hidden');
-    this.alignmentInstructions.removeAttribute('hidden');
-    console.log('Camera UI elements shown with alignment grid');
-  }
-
-  hideCameraUI() {
-    // Hide camera container and controls when camera is stopped
-    if (this.cameraContainer) {
-      this.cameraContainer.setAttribute('hidden', '');
-    }
-    if (this.cameraOperationControls) {
-      this.cameraOperationControls.setAttribute('hidden', '');
-    }
-    if (this.alignmentInstructions) {
-      this.alignmentInstructions.setAttribute('hidden', '');
-    }
-    // Hide flash button when camera is stopped
-    if (this.flashToggleBtn) {
-      this.flashToggleBtn.setAttribute('hidden', '');
-    }
-    console.log('Camera UI elements hidden');
+    if (this.stage.dataset.state === 'live') this.setStageState('idle');
+    if (remember) this.savePreference(CAMERA_PREF_KEY, '0');
+    this.updateCaptureButton();
   }
 
   async checkFlashCapability() {
     try {
-      if (this.stream) {
-        const videoTrack = this.stream.getVideoTracks()[0];
-        const capabilities = videoTrack.getCapabilities();
-
-        if (capabilities.torch) {
-          // Device has flash capability, show the flash button
-          this.flashToggleBtn.removeAttribute('hidden');
-          this.flashEnabled = false;
-          this.flashToggleBtn.textContent = '🔦 Blitz';
-          console.log('Flash capability detected');
-        } else {
-          // No flash capability, keep button hidden
-          this.flashToggleBtn.setAttribute('hidden', '');
-          console.log('No flash capability detected');
-        }
-      }
+      const videoTrack = this.stream?.getVideoTracks()[0];
+      const capabilities = videoTrack?.getCapabilities?.() || {};
+      this.flashEnabled = false;
+      this.flashToggleBtn.hidden = !capabilities.torch;
+      this.updateFlashButton();
     } catch (error) {
       console.log('Error checking flash capability:', error);
-      this.flashToggleBtn.setAttribute('hidden', '');
+      this.flashToggleBtn.hidden = true;
     }
+  }
+
+  updateFlashButton() {
+    this.flashToggleBtn.setAttribute('aria-pressed', String(this.flashEnabled));
+    this.flashToggleBtn.setAttribute('aria-label', this.flashEnabled ? 'Licht ausschalten' : 'Licht einschalten');
   }
 
   async toggleFlash() {
+    const videoTrack = this.stream?.getVideoTracks()[0];
+    if (!videoTrack) return;
     try {
-      if (this.stream) {
-        const videoTrack = this.stream.getVideoTracks()[0];
-        this.flashEnabled = !this.flashEnabled;
-
-        await videoTrack.applyConstraints({
-          advanced: [{ torch: this.flashEnabled }]
-        });
-
-        // Update button text
-        this.flashToggleBtn.textContent = this.flashEnabled ? '🔦 Aus' : '🔦 Blitz';
-        console.log('Flash toggled:', this.flashEnabled ? 'on' : 'off');
-      }
+      const enabled = !this.flashEnabled;
+      await videoTrack.applyConstraints({ advanced: [{ torch: enabled }] });
+      this.flashEnabled = enabled;
+      this.updateFlashButton();
     } catch (error) {
       console.error('Error toggling flash:', error);
-      this.showError('Blitz konnte nicht umgeschaltet werden');
+      this.showError('Licht konnte nicht umgeschaltet werden.');
     }
   }
 
-  // Upload methods
-  triggerFileUpload() {
-    this.fileInput.click();
+  // ---------- Capture & upload ----------
+
+  async captureCard() {
+    if (this.isProcessing || !this.stream || !this.video.videoWidth) return;
+    await this.runScan(this.captureFromVideo());
+  }
+
+  captureFromVideo() {
+    const canvas = document.createElement('canvas');
+    canvas.width = this.video.videoWidth;
+    canvas.height = this.video.videoHeight;
+    canvas.getContext('2d').drawImage(this.video, 0, 0);
+    return canvas;
   }
 
   async handleFileUpload(event) {
     const file = event.target.files[0];
-    if (!file) return;
+    event.target.value = ''; // allow picking the same file again
+    if (!file || this.isProcessing) return;
 
-    // Validate file type
     if (!file.type.startsWith('image/')) {
-      this.showError('Bitte wählen Sie eine Bilddatei aus.');
+      this.showError('Bitte wähle eine Bilddatei aus.');
       return;
     }
 
+    let canvas;
     try {
-      // Create canvas from uploaded image
-      const canvas = await this.createCanvasFromFile(file);
-
-      // Process the uploaded image using the same workflow as camera
-      await this.processImage(canvas);
+      canvas = await this.createCanvasFromFile(file);
     } catch (error) {
-      this.showError('Fehler beim Verarbeiten des Bildes: ' + error.message);
+      this.showError(error.message);
+      return;
     }
-
-    // Clear the file input
-    event.target.value = '';
+    await this.runScan(canvas);
   }
 
   createCanvasFromFile(file) {
     return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0);
-
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        canvas.getContext('2d').drawImage(img, 0, 0);
+        URL.revokeObjectURL(url);
         resolve(canvas);
       };
-      img.onerror = () => reject(new Error('Bild konnte nicht geladen werden'));
-      img.src = URL.createObjectURL(file);
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error('Das Bild konnte nicht geladen werden.'));
+      };
+      img.src = url;
     });
   }
 
-  async processImage(canvas) {
+  // Shared by camera capture and upload: shows the frozen photo and the
+  // processing steps while recognition runs, then opens the result sheet.
+  async runScan(canvas) {
+    this.isProcessing = true;
+    this.updateCaptureButton();
+    this.showStagePreview(canvas);
+    this.showProcessing(true);
+
     try {
-      this.updateStatus('Karte wird automatisch erkannt...', 50);
-
-      // Multi-attempt detection + OCR: try several crop/binarization
-      // variants and rank them by how plausible the OCR text looks.
-      const rankedCandidates = await this.performCollectorNumberOCRWithFallback(canvas);
-      const bestGuessText = rankedCandidates[0]?.text || '';
-
-      // Search card by collector number, trying the next-best candidate on
-      // a miss instead of giving up after the first one.
-      this.updateStatus('Karte wird gesucht...', 90);
-      let cardData = null;
-      let usedCandidate = null;
-      for (const candidate of rankedCandidates.slice(0, 3)) {
-        if (!candidate.text) continue;
-        cardData = await this.searchCardByCollectorNumber(candidate.text);
-        if (cardData) {
-          usedCandidate = candidate;
-          break;
-        }
-      }
-
-      this.updateStatus('Fertig!', 100);
-
-      if (cardData) {
-        cardData.confidence = this.classifyConfidence(usedCandidate.score);
-        this.showResults(cardData, canvas, `Sammlernummer: ${usedCandidate.text}`);
-        this.showSuccess(`Karte ${cardData.name} wurde gefunden.`)
-      } else {
-        this.showWarning(bestGuessText
-          ? `Karte mit Sammlernummer "${bestGuessText}" wurde nicht gefunden.`
-          : 'Keine Sammlernummer im Bild gefunden. Karte näher, gerader oder heller fotografieren.');
-        // Show results with an editable collector number so the user can
-        // correct a misread digit instead of hitting a dead end.
-        this.showResults({
-          isUnknown: true,
-          name: `Unbekannte Karte (${bestGuessText})`,
-          set: 'Nicht gefunden',
-          image: '/assets/default-card.png'
-        }, canvas, bestGuessText);
-      }
+      await this.processImage(canvas);
     } catch (error) {
-      throw new Error('Fehler beim Verarbeiten: ' + error.message);
+      console.error('Scan failed:', error);
+      this.showError('Beim Verarbeiten ist ein Fehler aufgetreten: ' + error.message);
+    } finally {
+      this.isProcessing = false;
+      this.showProcessing(false);
+      this.setStageState(this.stream ? 'live' : 'idle');
+      this.updateCaptureButton();
     }
+  }
+
+  showStagePreview(source) {
+    const scale = Math.min(1, 1000 / source.width);
+    this.stagePreview.width = Math.max(1, Math.round(source.width * scale));
+    this.stagePreview.height = Math.max(1, Math.round(source.height * scale));
+    this.stagePreview.getContext('2d').drawImage(source, 0, 0, this.stagePreview.width, this.stagePreview.height);
+    this.previewScale = scale;
+    this.setStageState('frozen');
+  }
+
+  highlightOnPreview(candidate) {
+    if (!candidate) return;
+    const ctx = this.stagePreview.getContext('2d');
+    const s = this.previewScale;
+    const pad = 6;
+    const { x, y, width, height } = candidate.bounds;
+    ctx.lineWidth = Math.max(3, this.stagePreview.width / 250);
+    ctx.strokeStyle = '#E0AD62';
+    ctx.strokeRect(x * s - pad, y * s - pad, width * s + pad * 2, height * s + pad * 2);
+  }
+
+  async processImage(canvas) {
+    this.setStep('locate', 5, 'Sammlernummer wird gesucht …');
+    await nextFrame();
+
+    const rankedCandidates = await this.performCollectorNumberOCRWithFallback(canvas);
+    const bestGuessText = rankedCandidates[0]?.text?.trim() || '';
+
+    // Try the next-best OCR candidate on a miss instead of giving up
+    this.setStep('lookup', 92, 'Karte wird bei Scryfall gesucht …');
+    await this.collectionRegexReady;
+    let cardData = null;
+    let usedCandidate = null;
+    for (const candidate of rankedCandidates.slice(0, 3)) {
+      if (!candidate.text) continue;
+      cardData = await this.searchCardByCollectorNumber(candidate.text);
+      if (cardData) {
+        usedCandidate = candidate;
+        break;
+      }
+    }
+    this.setStep(null, 100, 'Fertig');
+
+    if (cardData) {
+      cardData.confidence = this.classifyConfidence(usedCandidate.score);
+      cardData.recognizedText = usedCandidate.text.trim();
+      cardData.scanRegion = this.debugData.winner?.region || null;
+      this.openCardSheet(cardData);
+      return;
+    }
+
+    if (this.lastLookupError === 'network') {
+      this.showError('Scryfall ist gerade nicht erreichbar. Prüfe die Internetverbindung.');
+    }
+    this.showCorrection({
+      mode: bestGuessText ? 'notFound' : 'noText',
+      text: bestGuessText,
+      tried: rankedCandidates.map(c => c.text.trim()).filter(Boolean),
+      region: this.debugData.winner?.region
+    });
   }
 
   // Confidence tiers derived from the OCR/parse score; HIGH matches the
@@ -415,124 +675,43 @@ class MTGScanner {
     return 'LOW';
   }
 
-  async captureCardByCollectorNumber() {
-    if (this.isProcessing) return;
+  // ---------- Processing panel ----------
 
-    try {
-      this.isProcessing = true;
-      this.showProcessing(true);
-      this.updateStatus('Bild wird aufgenommen...', 20);
-
-      // Capture full image from video - automatic detection will handle cropping
-      const canvas = this.captureFromVideo();
-
-      return this.processImage(canvas);
-    } catch (error) {
-      this.showError('Fehler beim Scannen: ' + error.message);
-    } finally {
-      this.isProcessing = false;
-      this.showProcessing(false);
-    }
-  }
-
-  async captureCard() {
-    return this.captureCardByCollectorNumber();
-  }
-
-  captureFromVideo() {
-    const canvas = document.createElement('canvas');
-    canvas.width = this.video.videoWidth;
-    canvas.height = this.video.videoHeight;
-
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(this.video, 0, 0);
-
-    return canvas;
-  }
-
-  // Debug display methods for the recognition steps
-  updateDebugStats() {
-    if (!this.debugStatsContent || !this.debugData.source) return;
-
-    const { source, candidates, ocrResults, durationMs } = this.debugData;
-    const rows = [
-      ['Original Size', `${source.width}×${source.height}`],
-      ['Gefundene Textblöcke', `${candidates.length}`],
-      ['Dauer Erkennung', `${durationMs} ms`],
-    ];
-    if (ocrResults) {
-      rows.push(['OCR Final Result', `"${ocrResults.finalText}" (${ocrResults.finalScore})`]);
-      rows.push(['  └─ Raw Text', `"${ocrResults.rawText}" (${ocrResults.rawScore})`]);
-      rows.push(['  └─ Cleaned Text', `"${ocrResults.cleanedText}" (${ocrResults.cleanedScore})`]);
-      rows.push(['  └─ Winning Variant', `${ocrResults.usedVariant} (${ocrResults.attempts.length} OCR-Lauf/Läufe)`]);
-    }
-
-    // textContent instead of innerHTML: OCR text is untrusted input.
-    const container = document.createElement('div');
-    container.className = 'debug-stats-content';
-    for (const [label, value] of rows) {
-      const item = document.createElement('div');
-      item.className = 'debug-stat-item';
-      const labelEl = document.createElement('span');
-      labelEl.className = 'debug-stat-label';
-      labelEl.textContent = `${label}:`;
-      const valueEl = document.createElement('span');
-      valueEl.className = 'debug-stat-value';
-      valueEl.textContent = value;
-      item.append(labelEl, valueEl);
-      container.append(item);
-    }
-    this.debugStatsContent.replaceChildren(container);
-  }
-
-  // Debug images are kept as canvases and only encoded when viewed:
-  // toDataURL() on a 12MP photo costs hundreds of milliseconds per scan.
-  showDebugCanvas(title, canvas, description) {
-    if (!canvas) {
-      alert('Führen Sie zuerst einen Scan durch, um Debug-Bilder zu generieren.');
-      return;
-    }
-    this.displayDebugImage(title, canvas.toDataURL(), description);
-  }
-
-  showCapturedImage() {
-    this.showDebugCanvas('📷 Original', this.debugData.source,
-      'Ursprüngliches Bild vom Kamera-Stream oder hochgeladene Datei');
-  }
-
-  showLocatorImage() {
-    const { source, candidates } = this.debugData;
-    this.showDebugCanvas('🔎 Textsuche', source && drawLocatorOverview(source, candidates),
-      'Gefundene Sammlernummer-Kandidaten (rot = bester, gelb = Ausweichkandidaten)');
-  }
-
-  showTextAreaImage() {
-    this.showDebugCanvas('📝 Textbereich', this.debugData.winner?.region,
-      'Ausschnitt des verwendeten Kandidaten aus dem Originalbild');
-  }
-
-  showFinalImage() {
-    this.showDebugCanvas('🎯 Final', this.debugData.winner?.canvas,
-      'Binarisiertes Bild, das an die OCR geht');
-  }
-
-  displayDebugImage(title, imageDataUrl, description) {
-    this.debugImageTitle.textContent = title;
-    this.debugImage.src = imageDataUrl;
-
-    // Support HTML in description for OCR results
-    if (description.includes('<')) {
-      this.debugImageInfo.innerHTML = description;
+  showProcessing(show) {
+    this.processingSection.hidden = !show;
+    if (show) {
+      this.lastScanPanel.hidden = true;
+      this.setProgress(0);
+      this.processingSection.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     } else {
-      this.debugImageInfo.textContent = description;
+      this.renderLastScan();
     }
-
-    this.debugImageDisplay.hidden = false;
   }
 
-  hideDebugImage() {
-    this.debugImageDisplay.hidden = true;
+  // Marks the given step as active and all earlier ones as done; `null`
+  // marks every step as done.
+  setStep(stepName, progress, statusText) {
+    const activeIndex = stepName ? PROCESSING_STEPS.indexOf(stepName) : PROCESSING_STEPS.length;
+    this.stepItems.forEach((item, index) => {
+      item.classList.toggle('is-done', index < activeIndex);
+      item.classList.toggle('is-active', index === activeIndex);
+    });
+    this.setProgress(progress);
+    if (statusText !== undefined) this.statusText.textContent = statusText;
   }
+
+  setProgress(progress) {
+    const value = Math.max(0, Math.min(100, Math.round(progress)));
+    this.progressBar.style.width = `${value}%`;
+    this.progressTrack.setAttribute('aria-valuenow', String(value));
+  }
+
+  updateStatus(text, progress) {
+    this.statusText.textContent = text;
+    if (progress !== undefined) this.setProgress(progress);
+  }
+
+  // ---------- Recognition ----------
 
   // Locates collector-text candidates and OCRs them best-first, stopping at
   // the first convincing result. Returns every attempt ranked best-first so
@@ -548,6 +727,10 @@ class MTGScanner {
       ocrResults: null,
       durationMs: 0
     };
+
+    this.highlightOnPreview(candidates[0]);
+    this.setStep('ocr', 20, candidates.length ? 'Text wird gelesen …' : 'Keine Sammlernummer gefunden');
+    await nextFrame();
 
     const attempts = [];
     let best = null;
@@ -606,7 +789,6 @@ class MTGScanner {
       console.warn('No collector text block found in the image');
     }
 
-    this.updateStatus('OCR abgeschlossen', 90);
     this.updateDebugStats();
 
     return attempts.slice().sort((a, b) => b.score - a.score);
@@ -625,10 +807,14 @@ class MTGScanner {
           // blocked by COEP: require-corp once cross-origin isolation is enabled.
           workerPath: '/tesseract/worker.min.js',
           corePath: '/tesseract/core',
+          // English language data, self-hosted as well (vite.config.js
+          // vendorTesseractAssets) instead of Tesseract's jsdelivr default
+          langPath: '/tesseract/lang',
           logger: m => {
             if (m.status === 'recognizing text') {
-              const progress = 80 + (m.progress * 10);
-              this.updateStatus(`Sammlernummer wird erkannt... ${Math.round(m.progress * 100)}%`, progress);
+              this.updateStatus('Text wird gelesen …', 20 + m.progress * 70);
+            } else if (/loading|initializ/.test(m.status)) {
+              this.updateStatus('Texterkennung wird beim ersten Scan geladen …');
             }
           }
         }))
@@ -647,273 +833,252 @@ class MTGScanner {
     return { rawText, cleanedText: cleanOCRText(rawText) };
   }
 
+  // Returns the card or null; `this.lastLookupError` says why it's null
+  // ('parse', 'notFound' or 'network') so the UI can explain it.
   async searchCardByCollectorNumber(collectorInfo) {
+    this.lastLookupError = null;
+
+    // Parse collector number info (e.g., "FDN U 0125" or "U 0125")
+    const parsed = parseCollectorNumber(collectorInfo, this.collectionRegex);
+    if (!parsed) {
+      console.error('Could not parse collector number:', collectorInfo);
+      this.lastLookupError = 'parse';
+      return null;
+    }
+
+    const { setCode, collectorNumber, language } = parsed;
+    console.log('Parsed collector info:', setCode, collectorNumber, language);
+
+    // The collector number is a string (may include a letter suffix or a
+    // promo star), so it's URL-encoded rather than parsed as an integer.
+    let apiUrl = `https://api.scryfall.com/cards/${setCode.toLowerCase()}/${encodeURIComponent(collectorNumber)}`;
+    if (language) {
+      apiUrl += `?lang=${mapLanguageCode(language)}`;
+    }
+
+    let response;
     try {
-      // Parse collector number info (e.g., "FDN U 0125" or "U 0125")
-      const parsed = parseCollectorNumber(collectorInfo, this.collectionRegex);
-      if (!parsed) {
-        console.error('Could not parse collector number:', collectorInfo);
-        return null;
-      }
-
-      const { setCode, collectorNumber, language } = parsed;
-      console.log('Parsed collector info:', setCode, collectorNumber, language);
-
-      // Build Scryfall URL with language parameter if detected. The
-      // collector number is a string (may include a letter suffix or a
-      // promo star), so it's URL-encoded rather than parsed as an integer.
-      let apiUrl = `https://api.scryfall.com/cards/${setCode.toLowerCase()}/${encodeURIComponent(collectorNumber)}`;
-
-      if (language) {
-        const scryfallLang = mapLanguageCode(language);
-        apiUrl += `?lang=${scryfallLang}`;
-        console.log('Using language-specific API URL:', apiUrl);
-      }
-
-      // Use exact Scryfall lookup by set and collector number
-      const response = await fetch(apiUrl, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        const card = await response.json();
-        return {
-          name: card.name,
-          set: card.set_name,
-          image: card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal,
-          id: card.id,
-          collectorNumber: card.collector_number,
-          setCode: card.set.toUpperCase(),
-          language: language || 'EN', // Store the original detected language code or default to EN
-          languageDisplay: getLanguageDisplayName(language || 'EN'),
-          isFoil: false // Foil isn't detectable from the photo; the modal has a toggle
-        };
-      }
+      response = await fetch(apiUrl, { headers: { 'Accept': 'application/json' } });
     } catch (error) {
       console.error('Card search error:', error);
+      this.lastLookupError = 'network';
+      return null;
     }
 
-    return null;
+    if (!response.ok) {
+      this.lastLookupError = response.status === 404 ? 'notFound' : 'network';
+      return null;
+    }
+
+    const card = await response.json();
+    return {
+      // `name` stays English (Moxfield export); the localized name is for display
+      name: card.name,
+      printedName: card.printed_name || null,
+      set: card.set_name,
+      image: card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal,
+      id: card.id,
+      collectorNumber: card.collector_number,
+      setCode: card.set.toUpperCase(),
+      language: language || 'EN', // Store the original detected language code or default to EN
+      languageDisplay: getLanguageDisplayName(language || 'EN'),
+      isFoil: false // Foil isn't detectable from the photo; the sheet has a toggle
+    };
   }
 
-  toggleDebugSection() {
-    if (!this.debugSection) return;
-    const isHidden = this.debugSection.hasAttribute('hidden');
-    if (isHidden) {
-      this.debugSection.removeAttribute('hidden');
-      this.showInfo('Debug-Bereich aktiviert', 2500);
-    } else {
-      this.debugSection.setAttribute('hidden', '');
-      this.showInfo('Debug-Bereich deaktiviert', 2500);
-    }
-  }
+  // ---------- Card sheet ----------
 
-  showProcessing(show) {
-    this.processingSection.style.display = show ? 'block' : 'none';
-
-    if (show) {
-      this.progressBar.style.width = '0%';
-    }
-  }
-
-  updateStatus(text, progress = 0) {
-    this.statusText.textContent = text;
-    this.progressBar.style.width = `${progress}%`;
-  }
-
-  async showResults(cardData, cardImage, recognizedText = '') {
-    // Hide processing section
-    this.processingSection.style.display = 'none';
-
-    // Store current card data
-    this.currentCard = cardData;
-    this.currentCardImage = cardImage.toDataURL();
-
-    // Show the card modal instead of inline results
-    await this.showCardModal(cardData, recognizedText);
-  }
-
-  // Modal Management Methods
-  async showCardModal(cardData, recognizedText = '') {
-    // Store the previous quantities for both foil and normal versions
-    const normalVersion = { ...cardData, isFoil: false };
-    const foilVersion = { ...cardData, isFoil: true };
-
-    cardData.previousQuantityNormal = this.getCardQuantity(normalVersion);
-    cardData.previousQuantityFoil = this.getCardQuantity(foilVersion);
-
-    // Set the initial previous quantity based on current foil status
-    cardData.previousQuantity = cardData.isFoil ? cardData.previousQuantityFoil : cardData.previousQuantityNormal;
-
-    // Set modal content
-    this.modalCardName.textContent = cardData.name;
-    this.modalCardSet.textContent = cardData.set;
-
-    // Initialize foil toggle button and apply effects
-    this.updateFoilToggleButton(cardData.isFoil);
-    this.applyFoilEffectToModal(cardData.isFoil);
-
-    // Display language information
-    if (cardData.languageDisplay) {
-      this.modalLanguageText.textContent = cardData.languageDisplay;
-      this.modalCardLanguage.style.display = 'block';
-    } else {
-      this.modalCardLanguage.style.display = 'none';
-    }
-
-    // Confidence badge: shown for MEDIUM/LOW confidence matches only, as a
-    // non-blocking hint - it never gates adding the card to the collection.
-    if (cardData.confidence && cardData.confidence !== 'HIGH') {
-      this.modalConfidenceBadge.textContent = cardData.confidence === 'MEDIUM'
-        ? '⚠️ Mittlere Erkennungssicherheit – bitte prüfen'
-        : '⚠️ Niedrige Erkennungssicherheit – bitte prüfen';
-      this.modalConfidenceBadge.className = `modal-confidence-badge ${cardData.confidence.toLowerCase()}`;
-      this.modalConfidenceBadge.removeAttribute('hidden');
-    } else {
-      this.modalConfidenceBadge.setAttribute('hidden', '');
-    }
-
-    // Manual correction UI for unresolved scans - lets the user fix a
-    // misread collector number instead of hitting a dead end.
-    if (cardData.isUnknown) {
-      this.manualCorrectionSection.removeAttribute('hidden');
-      this.manualCollectorInput.value = recognizedText || '';
-    } else {
-      this.manualCorrectionSection.setAttribute('hidden', '');
-    }
-
-    // Show loading state for modal image
-    this.modalCardImage.classList.add('loading');
-    this.modalCardImage.src = 'data:image/svg+xml;base64,' + btoa(
-      '<svg width="150" height="210" xmlns="http://www.w3.org/2000/svg">' +
-      '<rect width="150" height="210" fill="#f0f0f0" stroke="#ccc" stroke-width="2"/>' +
-      '<text x="75" y="105" text-anchor="middle" fill="#666" font-family="Arial" font-size="12">Loading...</text>' +
-      '</svg>'
-    );
-
-    // Load and display the card image
-    try {
-      this.modalCardImage.src = await this.fetchCardImage(cardData.image);
-      this.modalCardImage.classList.remove('loading');
-    } catch (error) {
-      console.error('Error fetching card image for modal:', error);
-      this.modalCardImage.src = 'data:image/svg+xml;base64,' + btoa(
-        '<svg width="150" height="210" xmlns="http://www.w3.org/2000/svg">' +
-        '<rect width="150" height="210" fill="#f0f0f0" stroke="#ccc" stroke-width="2"/>' +
-        '<text x="75" y="105" text-anchor="middle" fill="#666" font-family="Arial" font-size="10">No image</text>' +
-        '</svg>'
-      );
-      this.modalCardImage.classList.remove('loading');
-    }
-
-    // Update quantity display
-    this.updateModalQuantityDisplay(cardData);
-
-    // Show the modal
-    this.cardModal.removeAttribute('hidden');
-
-    // Focus management for accessibility
-    setTimeout(() => {
-      this.modalCloseBtn.focus();
-    }, 100);
+  openDialog(dialog) {
+    if (!dialog.open) dialog.showModal();
   }
 
   hideCardModal() {
-    this.cardModal.setAttribute('hidden', '');
+    if (this.cardModal.open) this.cardModal.close();
   }
 
-  // Re-runs the Scryfall lookup against a user-edited collector number,
-  // replacing the "Unbekannte Karte" dead end with a real recovery path.
+  languageName(card) {
+    return LANGUAGE_NAMES_DE[card.language] || card.languageDisplay || '';
+  }
+
+  collectorLabel(card) {
+    return [card.setCode, card.collectorNumber].filter(Boolean).join(' ') + (card.language ? ` · ${card.language}` : '');
+  }
+
+  openCardSheet(cardData, { reopened = false } = {}) {
+    // Previous quantities of both versions, so toggling foil shows the right one
+    cardData.previousQuantityNormal = this.getCardQuantity({ ...cardData, isFoil: false });
+    cardData.previousQuantityFoil = this.getCardQuantity({ ...cardData, isFoil: true });
+    cardData.previousQuantity = cardData.isFoil ? cardData.previousQuantityFoil : cardData.previousQuantityNormal;
+
+    this.currentCard = cardData;
+    // A reopened card was already handled - the primary button just closes
+    this.sheetChanged = reopened;
+
+    this.modalCardName.textContent = displayName(cardData);
+    this.modalCardSet.textContent = cardData.set || '';
+    this.modalCardLanguage.textContent = this.languageName(cardData);
+    this.modalCollectorNumber.textContent = this.collectorLabel(cardData);
+    this.modalCardImage.alt = displayName(cardData);
+    this.modalCardImage.src = cardData.image || DEFAULT_CARD_IMAGE;
+
+    // Medium/low confidence: a non-blocking hint with a shortcut to correct
+    if (cardData.confidence && cardData.confidence !== 'HIGH') {
+      this.confidenceTitle.textContent = cardData.confidence === 'MEDIUM'
+        ? 'Mittlere Erkennungssicherheit'
+        : 'Niedrige Erkennungssicherheit';
+      this.confidenceGauge.setAttribute('d', GAUGE_PATHS[cardData.confidence]);
+      this.modalConfidenceBadge.hidden = false;
+    } else {
+      this.modalConfidenceBadge.hidden = true;
+    }
+
+    this.updateFoilUI(cardData.isFoil);
+    this.updateModalQuantityDisplay(cardData);
+
+    this.manualCorrectionSection.hidden = true;
+    this.sheetFound.hidden = false;
+    this.openDialog(this.cardModal);
+    this.cardModal.scrollTop = 0;
+    this.sheetPrimaryBtn.focus();
+  }
+
+  // "Hinzufügen" adds one copy and closes; once the quantity was changed in
+  // the sheet the same button just closes ("Fertig").
+  confirmCardSheet() {
+    if (!this.sheetChanged) {
+      this.increaseCardQuantity();
+    }
+    this.hideCardModal();
+  }
+
+  onCardSheetClosed() {
+    if (this.currentCard && !this.sheetFound.hidden) {
+      this.lastScan = this.currentCard;
+    }
+    this.renderLastScan();
+    if (this.stream && this.currentView === 'scan') {
+      this.captureCardBtn.focus();
+    }
+  }
+
+  setFoilStatus(isFoil) {
+    if (!this.currentCard || this.currentCard.isFoil === isFoil) return;
+    this.currentCard.isFoil = isFoil;
+    this.currentCard.previousQuantity = isFoil
+      ? this.currentCard.previousQuantityFoil
+      : this.currentCard.previousQuantityNormal;
+    this.updateFoilUI(isFoil);
+    this.updateModalQuantityDisplay(this.currentCard);
+  }
+
+  updateFoilUI(isFoil) {
+    this.finishNormalBtn.setAttribute('aria-pressed', String(!isFoil));
+    this.finishFoilBtn.setAttribute('aria-pressed', String(isFoil));
+    this.cardModal.classList.toggle('is-foil', isFoil);
+  }
+
+  updateModalQuantityDisplay(cardData) {
+    const quantity = this.getCardQuantity(cardData);
+    const previousQuantity = cardData.previousQuantity || 0;
+    const delta = quantity - previousQuantity;
+
+    this.currentQuantity.textContent = quantity;
+    this.previousQuantity.textContent = previousQuantity;
+    this.quantityDelta.textContent = delta > 0 ? `+${delta}` : delta < 0 ? `−${-delta}` : '';
+    this.decreaseQuantityBtn.disabled = quantity === 0;
+    this.sheetPrimaryLabel.textContent = this.sheetChanged ? 'Fertig' : 'Hinzufügen';
+  }
+
+  renderLastScan() {
+    const card = this.lastScan;
+    if (!card || this.isProcessing) {
+      this.lastScanPanel.hidden = true;
+      return;
+    }
+    const quantity = this.getCardQuantity(card);
+    this.lastScanName.textContent = displayName(card);
+    this.lastScanMeta.textContent = `${card.isFoil ? 'Foil · ' : ''}${quantity}× in der Sammlung`;
+    if (this.lastScanImage.dataset.src !== card.image) {
+      this.lastScanImage.dataset.src = card.image || '';
+      this.lastScanImage.src = card.image || DEFAULT_CARD_IMAGE;
+    }
+    this.lastScanPanel.hidden = false;
+  }
+
+  // ---------- Collector-number correction ----------
+
+  showCorrection({ mode, text = '', tried = [], region = null }) {
+    const copy = {
+      notFound: ['Karte nicht gefunden', 'Die Sammlernummer war nicht eindeutig lesbar. Prüfe sie und suche erneut.'],
+      noText: ['Keine Sammlernummer gefunden', 'Im Foto war keine Sammlernummer zu erkennen. Halte die Karte näher, gerader oder heller – oder gib die Nummer selbst ein.'],
+      manual: ['Sammlernummer eingeben', 'Sie steht unten links auf der Karte.'],
+      fix: ['Sammlernummer korrigieren', 'Prüfe die gelesene Nummer und suche erneut.']
+    }[mode];
+    this.correctionTitle.textContent = copy[0];
+    this.correctionText.textContent = copy[1];
+
+    if (region && mode !== 'manual') {
+      this.correctionPreviewImage.src = region.toDataURL();
+      const uniqueTried = [...new Set(tried)].slice(0, 3);
+      this.correctionTried.replaceChildren();
+      if (uniqueTried.length) {
+        this.correctionTried.append('Gelesen: ');
+        uniqueTried.forEach((value, index) => {
+          if (index) this.correctionTried.append(', ');
+          this.correctionTried.append(createElement('span', 'mono', value.replace(/\s+/g, ' ')));
+        });
+      }
+      this.correctionPreview.hidden = false;
+    } else {
+      this.correctionPreview.hidden = true;
+    }
+
+    this.manualCollectorInput.value = text.replace(/\s+/g, ' ');
+    this.manualError.hidden = true;
+    this.sheetFound.hidden = true;
+    this.manualCorrectionSection.hidden = false;
+    this.openDialog(this.cardModal);
+    this.cardModal.scrollTop = 0;
+    this.manualCollectorInput.focus();
+    this.manualCollectorInput.select();
+  }
+
   async retryManualCorrection() {
     const value = this.manualCollectorInput.value.trim();
     if (!value) {
-      this.showWarning('Bitte eine Sammlernummer eingeben.');
+      this.showManualError('Bitte eine Sammlernummer eingeben.');
       return;
     }
 
-    this.showInfo('Suche...', 1500);
-    const cardData = await this.searchCardByCollectorNumber(value);
-
-    if (cardData) {
-      cardData.confidence = 'HIGH'; // user-confirmed value
-      this.currentCard = cardData;
-      await this.showCardModal(cardData, `Sammlernummer: ${value}`);
-      this.showSuccess(`Karte ${cardData.name} wurde gefunden.`);
-    } else {
-      this.showWarning(`Karte mit Sammlernummer "${value}" wurde nicht gefunden.`);
-    }
-  }
-
-  toggleFoilStatus() {
-    if (!this.currentCard) return;
-
-    // Store the current foil status before toggling
-    const wasInitiallyFoil = this.currentCard.isFoil;
-
-    // Toggle the foil status
-    this.currentCard.isFoil = !this.currentCard.isFoil;
-
-    console.log(`Toggled foil status from ${wasInitiallyFoil} to: ${this.currentCard.isFoil}`);
-
-    // Update the modal UI
-    this.updateFoilToggleButton(this.currentCard.isFoil);
-    this.applyFoilEffectToModal(this.currentCard.isFoil);
-
-    // Update the previous quantity based on the new foil status
-    this.currentCard.previousQuantity = this.currentCard.isFoil ?
-      this.currentCard.previousQuantityFoil :
-      this.currentCard.previousQuantityNormal;
-
-    // Update the quantity display to reflect the new foil status
-    this.updateModalQuantityDisplay(this.currentCard);
-
-    // Show info about what will happen
-    const newStatusText = this.currentCard.isFoil ? 'Foil' : 'Normal';
-    const currentQuantity = this.getCardQuantity(this.currentCard);
-
-    if (currentQuantity > 0) {
-      this.showInfo(`Switching to ${newStatusText} version. Current quantity: ${currentQuantity}`);
-    } else {
-      this.showInfo(`Switched to ${newStatusText} version. Will be added as new entry.`);
-    }
-  }
-
-  updateFoilToggleButton(isFoil) {
-    if (isFoil) {
-      this.foilToggleBtn.classList.add('foil');
-      this.foilToggleText.textContent = 'Foil Card';
-    } else {
-      this.foilToggleBtn.classList.remove('foil');
-      this.foilToggleText.textContent = 'Normal Card';
-    }
-  }
-
-  applyFoilEffectToModal(isFoil) {
-    const modalContent = this.cardModal.querySelector('.modal-content');
-
-    if (isFoil) {
-      modalContent.classList.add('foil');
-
-      // Add foil indicator to card name if not already present
-      if (!this.modalCardName.querySelector('.foil-indicator')) {
-        const foilIndicator = document.createElement('span');
-        foilIndicator.className = 'foil-indicator';
-        foilIndicator.textContent = '✨ FOIL';
-        this.modalCardName.appendChild(foilIndicator);
+    this.manualRetryBtn.disabled = true;
+    this.manualError.hidden = true;
+    try {
+      await this.collectionRegexReady;
+      const cardData = await this.searchCardByCollectorNumber(value);
+      if (cardData) {
+        cardData.confidence = 'HIGH'; // user-confirmed value
+        cardData.recognizedText = value;
+        this.openCardSheet(cardData);
+        return;
       }
-    } else {
-      modalContent.classList.remove('foil');
-
-      // Remove foil indicator if present
-      const existingIndicator = this.modalCardName.querySelector('.foil-indicator');
-      if (existingIndicator) {
-        existingIndicator.remove();
-      }
+      const messages = {
+        parse: 'Set-Code oder Nummer nicht erkannt. Beispiel: FDN 125',
+        notFound: `Keine Karte mit „${value}“ gefunden.`,
+        network: 'Scryfall ist gerade nicht erreichbar. Prüfe die Internetverbindung.'
+      };
+      this.showManualError(messages[this.lastLookupError] || messages.notFound);
+    } finally {
+      this.manualRetryBtn.disabled = false;
     }
   }
+
+  showManualError(message) {
+    this.manualError.textContent = message;
+    this.manualError.hidden = false;
+    this.manualCollectorInput.focus();
+  }
+
+  // ---------- Quantities ----------
 
   // Generate unique identifier for card including foil status
   getUniqueCardId(card) {
@@ -922,20 +1087,7 @@ class MTGScanner {
       console.error('Card has no valid ID:', card);
       return null;
     }
-    const foilSuffix = card.isFoil ? '_foil' : '_normal';
-    return `${baseId}${foilSuffix}`;
-  }
-
-  updateModalQuantityDisplay(cardData) {
-    const quantity = this.getCardQuantity(cardData);
-    this.currentQuantity.textContent = quantity;
-
-    // Show previous quantity (stored when modal was first opened)
-    const previousQuantity = cardData.previousQuantity || 0;
-    this.previousQuantity.textContent = previousQuantity;
-
-    // Enable/disable decrease button based on quantity
-    this.decreaseQuantityBtn.disabled = quantity === 0;
+    return `${baseId}${card.isFoil ? '_foil' : '_normal'}`;
   }
 
   getCardQuantity(cardData) {
@@ -947,219 +1099,421 @@ class MTGScanner {
 
   increaseCardQuantity() {
     if (!this.currentCard) return;
-
     const uniqueId = this.getUniqueCardId(this.currentCard);
-    if (!uniqueId) {
-      this.showError(`Could not generate ID for card: ${this.currentCard.name}`);
-      return;
-    }
-    const existingCard = this.cards.find(c => this.getUniqueCardId(c) === uniqueId);
+    if (!uniqueId) return;
 
+    const existingCard = this.cards.find(c => this.getUniqueCardId(c) === uniqueId);
     if (existingCard) {
       existingCard.count = (existingCard.count || 1) + 1;
-      const cardType = this.currentCard.isFoil ? 'foil' : 'normal';
-      this.showSuccess(`Added another copy. You now have ${existingCard.count} ${cardType} copies of "${this.currentCard.name}".`);
     } else {
-        this.cards.push({
-          ...this.currentCard,
-          count: 1,
-          addedAt: new Date().toISOString(),
-          // Ensure language and foil fields are preserved
-          language: this.currentCard.language || 'EN',
-          languageDisplay: this.currentCard.languageDisplay || 'English',
-          isFoil: this.currentCard.isFoil || false
-        });
-      const cardType = this.currentCard.isFoil ? 'foil' : 'normal';
-      this.showSuccess(`"${this.currentCard.name}" (${cardType}) wurde zur Sammlung hinzugefügt!`);
+      const {
+        previousQuantity, previousQuantityNormal, previousQuantityFoil,
+        confidence, recognizedText, scanRegion, ...card
+      } = this.currentCard;
+      this.cards.push({
+        ...card,
+        count: 1,
+        addedAt: new Date().toISOString(),
+        language: card.language || 'EN',
+        languageDisplay: card.languageDisplay || 'English',
+        isFoil: card.isFoil || false
+      });
     }
 
-    this.saveCollection();
-    this.updateCardCount();
-    this.renderCollection();
+    this.sheetChanged = true;
+    this.commitCollectionChange();
     this.updateModalQuantityDisplay(this.currentCard);
   }
 
   decreaseCardQuantity() {
     if (!this.currentCard) return;
-
     const uniqueId = this.getUniqueCardId(this.currentCard);
-    if (!uniqueId) {
-      this.showError(`Could not generate ID for card: ${this.currentCard.name}`);
-      return;
-    }
-    const existingCard = this.cards.find(c => this.getUniqueCardId(c) === uniqueId);
+    if (!uniqueId) return;
 
-    if (!existingCard || existingCard.count <= 1) {
-      // Remove the card entirely
+    const existingCard = this.cards.find(c => this.getUniqueCardId(c) === uniqueId);
+    if (!existingCard) return;
+    if ((existingCard.count || 1) <= 1) {
       this.cards = this.cards.filter(c => this.getUniqueCardId(c) !== uniqueId);
-      const cardType = this.currentCard.isFoil ? 'foil' : 'normal';
-      this.showWarning(`"${this.currentCard.name}" (${cardType}) wurde aus der Sammlung entfernt.`);
     } else {
       existingCard.count -= 1;
-      const cardType = this.currentCard.isFoil ? 'foil' : 'normal';
-      this.showInfo(`Reduced quantity. You now have ${existingCard.count} ${cardType} copies of "${this.currentCard.name}".`);
     }
 
-    this.saveCollection();
-    this.updateCardCount();
-    this.renderCollection();
+    this.sheetChanged = true;
+    this.commitCollectionChange();
     this.updateModalQuantityDisplay(this.currentCard);
   }
 
-  updateCardCount() {
-    // Calculate total cards including quantities
-    const totalCards = this.cards.reduce((sum, card) => sum + (card.count || 1), 0);
-    const uniqueCards = this.cards.length;
-
-    // Display both unique cards and total quantity
-    this.cardCount.textContent = `${uniqueCards} (${totalCards} total)`;
-  }
-
-  async renderCollection() {
-    this.cardList.innerHTML = '';
-
-    for (const card of this.cards) {
-      const cardElement = document.createElement('div');
-      cardElement.className = 'card-item';
-
-      // Create the card element structure
-      const languageDisplay = card.languageDisplay ? `<p class="card-language">🌍 ${card.languageDisplay}</p>` : '';
-      const foilIndicator = card.isFoil ? `<span class="foil-indicator">✨ FOIL</span>` : '';
-      const uniqueCardId = this.getUniqueCardId(card);
-
-      if (!uniqueCardId) {
-        console.error('Could not generate unique ID for card:', card);
-        continue;
-      }
-      cardElement.innerHTML = `
-                <img alt="${card.name}" data-loading="true">
-                <div class="card-item-info">
-                    <h5>${card.name} ${foilIndicator}</h5>
-                    <p>${card.set}</p>
-                    ${languageDisplay}
-                    <div class="card-quantity-section">
-                        <span class="quantity-label">Anzahl:</span>
-                        <div class="quantity-controls-inline">
-                            <button class="quantity-btn-small decrease" onclick="mtgScanner.decreaseCardQuantityInCollection('${uniqueCardId}')" aria-label="Anzahl verringern">−</button>
-                            <span class="quantity-display-inline">${card.count || 1}</span>
-                            <button class="quantity-btn-small increase" onclick="mtgScanner.increaseCardQuantityInCollection('${uniqueCardId}')" aria-label="Anzahl erhöhen">+</button>
-                        </div>
-                    </div>
-                    <div class="card-item-actions">
-                        <button class="btn danger" onclick="mtgScanner.removeCard('${uniqueCardId}')">🗑️</button>
-                    </div>
-                </div>
-            `;
-
-      const imgElement = cardElement.querySelector('img');
-
-      // Fetch and set the image asynchronously
-      try {
-        imgElement.src = await this.fetchCardImage(card.image);
-        imgElement.removeAttribute('data-loading');
-      } catch (error) {
-        console.error(`Error fetching image for ${card.name}:`, error);
-        // Show placeholder image
-        imgElement.src = 'data:image/svg+xml;base64,' + btoa(
-          '<svg width="100" height="140" xmlns="http://www.w3.org/2000/svg">' +
-          '<rect width="100" height="140" fill="#f0f0f0" stroke="#ccc" stroke-width="1"/>' +
-          '<text x="50" y="70" text-anchor="middle" fill="#666" font-family="Arial" font-size="10">No image</text>' +
-          '</svg>'
-        );
-        imgElement.removeAttribute('data-loading');
-      }
-
-      this.cardList.appendChild(cardElement);
-    }
-  }
-
-  removeCard(uniqueCardId) {
-    this.cards = this.cards.filter(c => this.getUniqueCardId(c) !== uniqueCardId);
+  // Saves the active collection and refreshes everything that shows it
+  commitCollectionChange() {
     this.saveCollection();
     this.updateCardCount();
     this.renderCollection();
+    this.renderCollectionsList();
+    if (!this.cardModal.open) this.renderLastScan();
   }
 
-  // Increase card quantity directly from collection
-  increaseCardQuantityInCollection(uniqueCardId) {
+  // ---------- Collection view ----------
+
+  updateCardCount() {
+    const totalCards = this.cards.reduce((sum, card) => sum + (card.count || 1), 0);
+    this.cardCount.textContent = `${plural(this.cards.length, 'Karte', 'Karten')} · ${plural(totalCards, 'Exemplar', 'Exemplare')}`;
+  }
+
+  renderCollection() {
+    const query = this.searchQuery.trim().toLowerCase();
+    const matches = card => !query
+      || (card.name || '').toLowerCase().includes(query)
+      || (card.printedName || '').toLowerCase().includes(query)
+      || (card.set || '').toLowerCase().includes(query)
+      || (card.setCode || '').toLowerCase() === query;
+
+    const isEmpty = this.cards.length === 0;
+    this.collectionEmpty.hidden = !isEmpty;
+    this.collectionToolbar.hidden = isEmpty;
+
+    const fragment = document.createDocumentFragment();
+    let shown = 0;
+    // Newest first: the card you just scanned is at the top
+    for (let i = this.cards.length - 1; i >= 0; i--) {
+      const card = this.cards[i];
+      if (!matches(card)) continue;
+      const uniqueId = this.getUniqueCardId(card);
+      if (!uniqueId) continue;
+      fragment.appendChild(this.createCardTile(card, uniqueId));
+      shown++;
+    }
+
+    this.searchEmpty.hidden = isEmpty || shown > 0;
+    this.cardList.replaceChildren(fragment);
+  }
+
+  createCardTile(card, uniqueId) {
+    const tile = createElement('li', `card-tile${card.isFoil ? ' is-foil' : ''}`);
+    const name = displayName(card);
+    tile.dataset.id = uniqueId;
+
+    const imageWrap = createElement('div', 'tile-image-wrap');
+    const img = document.createElement('img');
+    img.alt = '';
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    img.crossOrigin = 'anonymous';
+    img.src = card.image || DEFAULT_CARD_IMAGE;
+    img.addEventListener('error', () => {
+      if (!img.src.endsWith(DEFAULT_CARD_IMAGE)) img.src = DEFAULT_CARD_IMAGE;
+    }, { once: true });
+    imageWrap.appendChild(img);
+
+    if (card.isFoil) {
+      const foilTag = createElement('span', 'foil-tag');
+      foilTag.append(createIcon('i-sparkle'), 'Foil');
+      imageWrap.appendChild(foilTag);
+    }
+
+    const removeBtn = createElement('button', 'tile-remove');
+    removeBtn.dataset.action = 'remove';
+    removeBtn.dataset.id = uniqueId;
+    removeBtn.setAttribute('aria-label', `${name} entfernen`);
+    const removeInner = document.createElement('span');
+    removeInner.appendChild(createIcon('i-trash'));
+    removeBtn.appendChild(removeInner);
+    imageWrap.appendChild(removeBtn);
+
+    const info = createElement('div', 'tile-info');
+    const nameEl = createElement('span', 'tile-name', name);
+    nameEl.title = name;
+    const meta = createElement('span', 'tile-meta',
+      [card.set, card.language].filter(Boolean).join(' · '));
+    info.append(nameEl, meta);
+
+    const stepper = createElement('div', 'tile-stepper');
+    const dec = createElement('button', '', '−');
+    dec.dataset.action = 'dec';
+    dec.dataset.id = uniqueId;
+    dec.setAttribute('aria-label', `Ein Exemplar von ${name} entfernen`);
+    const count = createElement('span', 'tile-count', String(card.count || 1));
+    count.setAttribute('aria-label', `${card.count || 1} Exemplare`);
+    const inc = createElement('button', '', '+');
+    inc.dataset.action = 'inc';
+    inc.dataset.id = uniqueId;
+    inc.setAttribute('aria-label', `Ein Exemplar von ${name} hinzufügen`);
+    stepper.append(dec, count, inc);
+
+    tile.append(imageWrap, info, stepper);
+    return tile;
+  }
+
+  onCardListClick(e) {
+    const button = e.target.closest('button[data-action]');
+    if (!button) return;
+    const { action, id } = button.dataset;
+    if (action === 'inc') this.changeCardCount(id, 1);
+    else if (action === 'dec') this.changeCardCount(id, -1);
+    else if (action === 'remove') this.removeCard(id);
+  }
+
+  changeCardCount(uniqueCardId, delta) {
     const card = this.cards.find(c => this.getUniqueCardId(c) === uniqueCardId);
-    if (card) {
-      card.count = (card.count || 1) + 1;
-      this.saveCollection();
-      this.updateCardCount();
+    if (!card) return;
+    const newCount = (card.count || 1) + delta;
+    if (newCount <= 0) {
+      this.removeCard(uniqueCardId);
+      return;
+    }
+    card.count = newCount;
+    this.saveCollection();
+    this.updateCardCount();
+    this.renderCollectionsList();
+
+    // Update the tile in place so keyboard focus stays on the button
+    const tile = this.cardList.querySelector(`.card-tile[data-id="${CSS.escape(uniqueCardId)}"]`);
+    const countEl = tile?.querySelector('.tile-count');
+    if (countEl) {
+      countEl.textContent = String(newCount);
+      countEl.setAttribute('aria-label', `${newCount} Exemplare`);
+    } else {
       this.renderCollection();
-      const cardType = card.isFoil ? 'foil' : 'normal';
-      this.showSuccess(`Anzahl von "${card.name}" (${cardType}) erhöht auf ${card.count}.`);
     }
   }
 
-  // Decrease card quantity directly from collection
-  decreaseCardQuantityInCollection(uniqueCardId) {
-    const card = this.cards.find(c => this.getUniqueCardId(c) === uniqueCardId);
-    if (card) {
-      if (card.count <= 1) {
-        // Remove card entirely if count would be 0
-        this.cards = this.cards.filter(c => this.getUniqueCardId(c) !== uniqueCardId);
-        const cardType = card.isFoil ? 'foil' : 'normal';
-        this.showWarning(`"${card.name}" (${cardType}) wurde aus der Sammlung entfernt.`);
-      } else {
-        card.count -= 1;
-        const cardType = card.isFoil ? 'foil' : 'normal';
-        this.showInfo(`Anzahl von "${card.name}" (${cardType}) verringert auf ${card.count}.`);
+  // Removes a card entry right away and offers an undo instead of asking first
+  removeCard(uniqueCardId) {
+    const index = this.cards.findIndex(c => this.getUniqueCardId(c) === uniqueCardId);
+    if (index === -1) return;
+    const [removed] = this.cards.splice(index, 1);
+    this.commitCollectionChange();
+
+    const collectionId = this.collectionsData.activeCollection;
+    this.showNotification(`„${displayName(removed)}“ entfernt.`, 'info', 6000, {
+      label: 'Rückgängig',
+      onClick: () => {
+        if (this.collectionsData.activeCollection !== collectionId) return;
+        this.cards.splice(Math.min(index, this.cards.length), 0, removed);
+        this.commitCollectionChange();
       }
-      this.saveCollection();
-      this.updateCardCount();
-      this.renderCollection();
-    }
+    });
   }
 
   exportCollection() {
-    // Generate Moxfield-compatible CSV format
-    const csvHeaders = ['Count', 'Name', 'Edition', 'Condition', 'Language', 'Foil', 'Collector Number'];
-    const csvRows = [csvHeaders];
-
-    // Add each card to CSV
-    for (const card of this.cards) {
-      const row = [
-        card.count || 1,                                    // Count
-        `"${card.name}"`,                                   // Name (quoted to handle commas)
-        `"${card.set || ''}"`,                              // Edition (set name)
-        'Near Mint',                                        // Condition (default)
-        card.languageDisplay || 'English',                 // Language (use detected language)
-        card.isFoil ? 'Yes' : 'No',                        // Foil (based on detection)
-        card.collectorNumber || ''                          // Collector Number
-      ];
-      csvRows.push(row);
+    if (this.cards.length === 0) {
+      this.showWarning('Die Sammlung ist leer – es gibt nichts zu exportieren.');
+      return;
     }
 
-    // Convert to CSV string
-    const csvContent = csvRows.map(row => row.join(',')).join('\n');
+    // Moxfield-compatible CSV
+    const rows = [['Count', 'Name', 'Edition', 'Condition', 'Language', 'Foil', 'Collector Number']];
+    for (const card of this.cards) {
+      rows.push([
+        card.count || 1,
+        card.name,
+        card.set || '',
+        'Near Mint',
+        card.languageDisplay || 'English',
+        card.isFoil ? 'Yes' : 'No',
+        card.collectorNumber || ''
+      ]);
+    }
+    const csvContent = rows.map(row => row.map(csvCell).join(',')).join('\n');
 
-    // Create and download CSV file
-    const dataBlob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(dataBlob);
+    const collection = this.collectionsData.collections[this.collectionsData.activeCollection];
+    const slug = (collection?.name || 'sammlung')
+      .toLowerCase()
+      .replace(/[^a-z0-9äöüß]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'sammlung';
 
+    const url = URL.createObjectURL(new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }));
     const link = document.createElement('a');
     link.href = url;
-    link.download = `mtg-collection-${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `mtg-${slug}-${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
 
-    URL.revokeObjectURL(url);
+    this.showSuccess('Export gespeichert (CSV im Moxfield-Format).');
   }
 
-  clearCollection() {
-    if (confirm('Wirklich alle Karten löschen?')) {
-      this.cards = [];
-      this.saveCollection();
-      this.updateCardCount();
-      this.renderCollection();
+  async clearCollection() {
+    if (this.cards.length === 0) return;
+    const collection = this.collectionsData.collections[this.collectionsData.activeCollection];
+    const total = this.cards.reduce((sum, card) => sum + (card.count || 1), 0);
+    const confirmed = await this.confirmAction({
+      title: `„${collection?.name || 'Sammlung'}“ leeren?`,
+      message: `${plural(total, 'Exemplar wird', 'Exemplare werden')} aus der Sammlung entfernt.`,
+      confirmLabel: 'Leeren',
+      danger: true
+    });
+    if (!confirmed) return;
+
+    const previousCards = this.cards;
+    const collectionId = this.collectionsData.activeCollection;
+    this.cards = [];
+    this.searchQuery = '';
+    this.collectionSearch.value = '';
+    this.commitCollectionChange();
+    this.showNotification('Sammlung geleert.', 'info', 8000, {
+      label: 'Rückgängig',
+      onClick: () => {
+        if (this.collectionsData.activeCollection !== collectionId) return;
+        this.cards = previousCards.concat(this.cards);
+        this.commitCollectionChange();
+      }
+    });
+  }
+
+  // Card images used to be fetched and stored as data URLs in localStorage,
+  // which filled the ~5MB quota after a few dozen cards (and could then
+  // break saving the collection itself). They are now plain <img> URLs that
+  // the browser caches; this frees the space the old cache took.
+  purgeLegacyImageCache() {
+    try {
+      Object.keys(localStorage)
+        .filter(key => key.startsWith('card-image-'))
+        .forEach(key => localStorage.removeItem(key));
+    } catch {
+      // Storage not accessible - nothing to clean up
     }
+  }
+
+  // ---------- Dialog helper ----------
+
+  // Styled replacement for confirm()/prompt(). Resolves to true/false, or -
+  // with `input` - to the entered text (null when cancelled).
+  confirmAction({ title, message = '', confirmLabel = 'OK', danger = false, input = null }) {
+    this.confirmTitle.textContent = title;
+    this.confirmMessage.textContent = message;
+    this.confirmOkBtn.textContent = confirmLabel;
+    this.confirmOkBtn.className = `btn ${danger ? 'btn-danger' : 'btn-primary'}`;
+
+    this.confirmInputWrap.hidden = !input;
+    if (input) {
+      this.confirmInputLabel.textContent = input.label;
+      this.confirmInput.value = input.value || '';
+    }
+
+    this.confirmDialog.returnValue = '';
+    this.confirmDialog.showModal();
+    if (input) {
+      this.confirmInput.focus();
+      this.confirmInput.select();
+    } else if (danger) {
+      // Destructive: start on "Abbrechen"
+      this.confirmDialog.querySelector('button[value="cancel"]').focus();
+    }
+
+    return new Promise(resolve => {
+      this.confirmDialog.addEventListener('close', () => {
+        const ok = this.confirmDialog.returnValue === 'ok';
+        resolve(input ? (ok ? this.confirmInput.value.trim() : null) : ok);
+      }, { once: true });
+    });
+  }
+
+  // ---------- Debug tools ----------
+
+  restoreDebugPreference() {
+    this.setDebugVisible(this.loadPreference(DEBUG_PREF_KEY) === '1');
+  }
+
+  toggleDebugSection() {
+    const visible = this.debugSection.hidden;
+    this.setDebugVisible(visible);
+    this.savePreference(DEBUG_PREF_KEY, visible ? '1' : '0');
+  }
+
+  setDebugVisible(visible) {
+    this.debugSection.hidden = !visible;
+    this.toggleDebugBtn.setAttribute('aria-checked', String(visible));
+  }
+
+  showDebugView(name) {
+    const views = {
+      captured: () => this.showCapturedImage(),
+      locator: () => this.showLocatorImage(),
+      textarea: () => this.showTextAreaImage(),
+      final: () => this.showFinalImage(),
+      ocr: () => this.showOCRResults()
+    };
+    views[name]?.();
+  }
+
+  updateDebugStats() {
+    if (!this.debugStatsContent || !this.debugData.source) return;
+
+    const { source, candidates, ocrResults, durationMs } = this.debugData;
+    const rows = [
+      ['Originalgröße', `${source.width}×${source.height}`],
+      ['Gefundene Textblöcke', `${candidates.length}`],
+      ['Dauer Erkennung', `${durationMs} ms`],
+    ];
+    if (ocrResults) {
+      rows.push(['OCR-Ergebnis', `"${ocrResults.finalText}" (${ocrResults.finalScore})`]);
+      rows.push(['  └─ Rohtext', `"${ocrResults.rawText}" (${ocrResults.rawScore})`]);
+      rows.push(['  └─ Bereinigt', `"${ocrResults.cleanedText}" (${ocrResults.cleanedScore})`]);
+      rows.push(['  └─ Variante', `${ocrResults.usedVariant} (${ocrResults.attempts.length} OCR-Lauf/Läufe)`]);
+    }
+
+    // textContent instead of innerHTML: OCR text is untrusted input.
+    const container = document.createElement('div');
+    for (const [label, value] of rows) {
+      const item = createElement('div', 'debug-stat-item');
+      item.append(createElement('span', 'debug-stat-label', `${label}:`), createElement('span', 'debug-stat-value', value));
+      container.append(item);
+    }
+    this.debugStatsContent.replaceChildren(container);
+  }
+
+  // Debug images are kept as canvases and only encoded when viewed:
+  // toDataURL() on a 12MP photo costs hundreds of milliseconds per scan.
+  showDebugCanvas(title, canvas, description) {
+    if (!canvas) {
+      this.showInfo('Führe zuerst einen Scan durch, um Debug-Bilder zu sehen.');
+      return;
+    }
+    this.displayDebugImage(title, canvas.toDataURL(), description);
+  }
+
+  showCapturedImage() {
+    this.showDebugCanvas('Original', this.debugData.source,
+      'Ursprüngliches Bild vom Kamera-Stream oder hochgeladene Datei');
+  }
+
+  showLocatorImage() {
+    const { source, candidates } = this.debugData;
+    this.showDebugCanvas('Textsuche', source && drawLocatorOverview(source, candidates),
+      'Gefundene Sammlernummer-Kandidaten (rot = bester, gelb = Ausweichkandidaten)');
+  }
+
+  showTextAreaImage() {
+    this.showDebugCanvas('Textbereich', this.debugData.winner?.region,
+      'Ausschnitt des verwendeten Kandidaten aus dem Originalbild');
+  }
+
+  showFinalImage() {
+    this.showDebugCanvas('Final', this.debugData.winner?.canvas,
+      'Binarisiertes Bild, das an die OCR geht');
+  }
+
+  displayDebugImage(title, imageDataUrl, description) {
+    this.debugImageTitle.textContent = title;
+    this.debugImage.src = imageDataUrl;
+
+    // Support HTML in description for OCR results (escaped by the caller)
+    if (description.includes('<')) {
+      this.debugImageInfo.innerHTML = description;
+    } else {
+      this.debugImageInfo.textContent = description;
+    }
+
+    this.debugImageDisplay.hidden = false;
+  }
+
+  hideDebugImage() {
+    this.debugImageDisplay.hidden = true;
   }
 
   showOCRResults() {
     const ocr = this.debugData.ocrResults;
     if (!ocr) {
-      alert('Führen Sie zuerst einen Scan durch, um OCR-Resultate zu generieren.');
+      this.showInfo('Führe zuerst einen Scan durch, um OCR-Resultate zu sehen.');
       return;
     }
 
@@ -1189,170 +1543,53 @@ ${attemptLines}<br><br>
     this.showDebugCanvas('OCR-Resultate & Bewertung', this.debugData.winner?.canvas, description);
   }
 
-  // Fetch card image to bypass CORS restrictions
-  async fetchCardImage(imageUrl) {
-    if (!imageUrl) {
-      throw new Error('No image URL provided');
-    }
+  // ---------- Notifications ----------
 
-    // Check if we already have this image cached
-    const cacheKey = `card-image-${btoa(imageUrl)}`;
-    const cachedImage = localStorage.getItem(cacheKey);
-    const cachedTimestamp = localStorage.getItem(`${cacheKey}-timestamp`);
+  // `action` ({ label, onClick }) adds a button, e.g. "Rückgängig"
+  showNotification(message, type = 'info', duration = 5000, action = null) {
+    const notification = createElement('div', `notification ${type}`);
+    notification.setAttribute('role', type === 'error' ? 'alert' : 'status');
 
-    // Use cached image if it exists and is less than 24 hours old
-    if (cachedImage && cachedTimestamp) {
-      const ageInHours = (Date.now() - parseInt(cachedTimestamp)) / (1000 * 60 * 60);
-      if (ageInHours < 24) {
-        console.log('Using cached image for:', imageUrl);
-        return cachedImage;
-      }
-    }
-
-    try {
-      console.log('Fetching image:', imageUrl);
-
-      // Fetch the image
-      const response = await fetch(imageUrl, {
-        method: 'GET',
-        headers: {
-          'Accept': 'image/*'
-        },
-        mode: 'cors'
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      // Convert to blob
-      const blob = await response.blob();
-
-      // Convert blob to data URL
-      const dataUrl = await this.blobToDataUrl(blob);
-
-      // Cache the result (but limit cache size to prevent storage issues)
-      try {
-        localStorage.setItem(cacheKey, dataUrl);
-        localStorage.setItem(`${cacheKey}-timestamp`, Date.now().toString());
-        console.log('Cached image for:', imageUrl);
-      } catch (cacheError) {
-        console.warn('Could not cache image (storage full?):', cacheError);
-        // Clear old cached images if storage is full
-        this.clearOldImageCache();
-      }
-
-      return dataUrl;
-
-    } catch (error) {
-      console.error('Error fetching image:', error);
-      throw error;
-    }
-  }
-
-  // Convert blob to data URL
-  blobToDataUrl(blob) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  }
-
-  // Clear old cached images to free up storage space
-  clearOldImageCache() {
-    const keys = Object.keys(localStorage);
-    const imageKeys = keys.filter(key => key.startsWith('card-image-'));
-    const timestampKeys = keys.filter(key => key.includes('-timestamp'));
-
-    // Sort by timestamp and remove oldest entries
-    const entries = timestampKeys
-      .map(key => ({
-        key: key.replace('-timestamp', ''),
-        timestamp: parseInt(localStorage.getItem(key) || '0')
-      }))
-      .sort((a, b) => a.timestamp - b.timestamp);
-
-    // Remove oldest 25% of cached images
-    const toRemove = Math.ceil(entries.length * 0.25);
-    for (let i = 0; i < toRemove; i++) {
-      const entry = entries[i];
-      localStorage.removeItem(entry.key);
-      localStorage.removeItem(`${entry.key}-timestamp`);
-      console.log('Removed old cached image:', entry.key);
-    }
-  }
-
-  // Notification system methods
-  showNotification(message, type = 'info', duration = 5000) {
-    const icons = {
-      success: '✅',
-      error: '❌',
-      warning: '⚠️',
-      info: 'ℹ️'
-    };
-
-    // Create notification element
-    const notification = document.createElement('div');
-    notification.className = `notification ${type}`;
-
-    // Icon comes from the hardcoded set above
-    const iconElem = document.createElement('div');
-    iconElem.className = 'notification-icon';
-    iconElem.textContent = icons[type] || icons.info;
-
+    notification.appendChild(createIcon(NOTIFICATION_ICONS[type] || NOTIFICATION_ICONS.info, 'icon notification-icon'));
     // Message may contain untrusted text (API data, error messages) —
     // textContent so it is never reinterpreted as HTML
-    const messageElem = document.createElement('div');
-    messageElem.className = 'notification-content';
-    messageElem.textContent = message;
+    notification.appendChild(createElement('div', 'notification-content', message));
 
-    const closeBtn = document.createElement('button');
-    closeBtn.className = 'notification-close';
-    closeBtn.setAttribute('aria-label', 'Close notification');
-    closeBtn.textContent = '✕';
-
-    notification.appendChild(iconElem);
-    notification.appendChild(messageElem);
-    notification.appendChild(closeBtn);
-
-    // Add to container
-    this.notificationContainer.appendChild(notification);
-
-    // Handle close button
-    closeBtn.addEventListener('click', () => this.hideNotification(notification));
-
-    // Show with animation
-    requestAnimationFrame(() => {
-      notification.classList.add('show');
-    });
-
-    // Auto-dismiss after duration
-    if (duration > 0) {
-      setTimeout(() => {
+    if (action) {
+      const actionBtn = createElement('button', 'notification-action', action.label);
+      actionBtn.addEventListener('click', () => {
+        action.onClick();
         this.hideNotification(notification);
-      }, duration);
+      });
+      notification.appendChild(actionBtn);
     }
 
+    const closeBtn = createElement('button', 'icon-btn');
+    closeBtn.setAttribute('aria-label', 'Hinweis schließen');
+    closeBtn.appendChild(createIcon('i-close'));
+    closeBtn.addEventListener('click', () => this.hideNotification(notification));
+    notification.appendChild(closeBtn);
+
+    // Keep the stack short - drop the oldest
+    const visible = [...this.notificationContainer.querySelectorAll('.notification:not(.hide)')];
+    visible.slice(0, Math.max(0, visible.length - MAX_NOTIFICATIONS + 1)).forEach(n => this.hideNotification(n));
+
+    this.notificationContainer.appendChild(notification);
+    requestAnimationFrame(() => notification.classList.add('show'));
+
+    if (duration > 0) {
+      setTimeout(() => this.hideNotification(notification), duration);
+    }
     return notification;
   }
 
   hideNotification(notification) {
     if (!notification || !notification.parentNode) return;
-
     notification.classList.add('hide');
     notification.classList.remove('show');
-
-    // Remove from DOM after animation
-    setTimeout(() => {
-      if (notification.parentNode) {
-        notification.parentNode.removeChild(notification);
-      }
-    }, 300);
+    setTimeout(() => notification.remove(), 300);
   }
 
-  // Convenience methods for different notification types
   showSuccess(message, duration = 4000) {
     return this.showNotification(message, 'success', duration);
   }
@@ -1369,10 +1606,9 @@ ${attemptLines}<br><br>
     return this.showNotification(message, 'info', duration);
   }
 
-  // Collection Management Methods
+  // ---------- Collections ----------
 
   initCollections() {
-    // Initialize the collections system
     const collectionsData = this.getCollectionsData();
 
     // If no collections exist, create default one
@@ -1394,19 +1630,13 @@ ${attemptLines}<br><br>
   }
 
   getCollectionsData() {
-    const stored = localStorage.getItem('mtg-collections-meta');
-    if (stored) {
-      try {
-        return JSON.parse(stored);
-      } catch (e) {
-        console.error('Error parsing collections data:', e);
-      }
+    try {
+      const stored = localStorage.getItem('mtg-collections-meta');
+      if (stored) return JSON.parse(stored);
+    } catch (e) {
+      console.error('Error parsing collections data:', e);
     }
-
-    return {
-      collections: {},
-      activeCollection: null
-    };
+    return { collections: {}, activeCollection: null };
   }
 
   saveCollectionsData(data) {
@@ -1415,12 +1645,12 @@ ${attemptLines}<br><br>
       this.collectionsData = data;
     } catch (e) {
       console.error('Error saving collections data:', e);
-      this.showError('Fehler beim Speichern der Sammlungsdaten');
+      this.showError('Die Sammlungsdaten konnten nicht gespeichert werden – der Browser-Speicher ist voll oder gesperrt.');
     }
   }
 
   generateCollectionId() {
-    return 'coll_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    return 'coll_' + Date.now() + '_' + Math.random().toString(36).slice(2, 11);
   }
 
   getCollectionStorageKey(collectionId) {
@@ -1429,37 +1659,30 @@ ${attemptLines}<br><br>
 
   loadActiveCollection() {
     const activeId = this.collectionsData.activeCollection;
+    this.cards = [];
     if (activeId && this.collectionsData.collections[activeId]) {
-      const storageKey = this.getCollectionStorageKey(activeId);
-      this.cards = JSON.parse(localStorage.getItem(storageKey) || '[]');
-      this.updateCollectionDisplay();
-    } else {
-      this.cards = [];
+      try {
+        this.cards = JSON.parse(localStorage.getItem(this.getCollectionStorageKey(activeId)) || '[]');
+      } catch (e) {
+        console.error('Error loading collection:', e);
+        this.showError('Die Sammlung konnte nicht geladen werden.');
+      }
     }
   }
 
   populateCollectionSelector() {
-    if (!this.collectionSelect) {
-      console.warn('Collection select element not found');
-      return;
-    }
-
-    this.collectionSelect.innerHTML = '';
-
-    Object.values(this.collectionsData.collections).forEach(collection => {
+    this.collectionSelect.replaceChildren(...this.sortedCollections().map(collection => {
       const option = document.createElement('option');
       option.value = collection.id;
       option.textContent = collection.name;
-
-      if (collection.id === this.collectionsData.activeCollection) {
-        option.selected = true;
-      }
-
-      this.collectionSelect.appendChild(option);
-    });
-
-    // Force the select to update its display
+      return option;
+    }));
     this.collectionSelect.value = this.collectionsData.activeCollection;
+  }
+
+  sortedCollections() {
+    return Object.values(this.collectionsData.collections)
+      .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
   }
 
   updateCollectionDisplay() {
@@ -1469,230 +1692,207 @@ ${attemptLines}<br><br>
     }
   }
 
-  switchToCollection(collectionId) {
-    if (collectionId === this.collectionsData.activeCollection) {
+  switchToCollection(collectionId, { silent = false } = {}) {
+    if (collectionId === this.collectionsData.activeCollection || !this.collectionsData.collections[collectionId]) {
       return;
     }
 
-    // Save current collection first
     this.saveCollection();
-
-    // Switch to new collection
     this.collectionsData.activeCollection = collectionId;
     this.saveCollectionsData(this.collectionsData);
 
-    // Load new collection and update UI
     this.loadActiveCollection();
-    this.populateCollectionSelector(); // Explicitly update selector
+    this.lastScan = null;
+    this.searchQuery = '';
+    this.collectionSearch.value = '';
+    this.populateCollectionSelector();
+    this.updateCollectionDisplay();
     this.updateCardCount();
     this.renderCollection();
-
-    const collection = this.collectionsData.collections[collectionId];
-    this.showInfo(`Zu Sammlung "${collection.name}" gewechselt`);
-  }
-
-  showCollectionModal() {
     this.renderCollectionsList();
-    this.collectionModal.removeAttribute('hidden');
+    this.renderLastScan();
 
-    // Focus on new collection input
-    setTimeout(() => {
-      this.newCollectionName.focus();
-    }, 100);
+    if (!silent) {
+      const collection = this.collectionsData.collections[collectionId];
+      this.showInfo(`Aktive Sammlung: „${collection.name}“`, 2500);
+    }
   }
 
-  hideCollectionModal() {
-    this.collectionModal.setAttribute('hidden', '');
-    this.newCollectionName.value = '';
+  isDuplicateCollectionName(name, exceptId = null) {
+    return Object.values(this.collectionsData.collections)
+      .some(c => c.id !== exceptId && c.name.toLowerCase() === name.toLowerCase());
   }
 
   createNewCollection() {
     const name = this.newCollectionName.value.trim();
     if (!name) {
-      this.showWarning('Bitte geben Sie einen Namen für die Sammlung ein');
+      this.showWarning('Bitte gib einen Namen für die Sammlung ein.');
+      this.newCollectionName.focus();
       return;
     }
-
-    // Check for duplicate names
-    const existingNames = Object.values(this.collectionsData.collections)
-      .map(c => c.name.toLowerCase());
-    if (existingNames.includes(name.toLowerCase())) {
-      this.showWarning('Eine Sammlung mit diesem Namen existiert bereits');
+    if (this.isDuplicateCollectionName(name)) {
+      this.showWarning('Eine Sammlung mit diesem Namen gibt es bereits.');
+      this.newCollectionName.focus();
       return;
     }
 
     const newId = this.generateCollectionId();
-    const newCollection = {
+    this.collectionsData.collections[newId] = {
       id: newId,
-      name: name,
+      name,
       createdAt: new Date().toISOString(),
       lastModified: new Date().toISOString(),
       cardCount: 0
     };
-
-    this.collectionsData.collections[newId] = newCollection;
     this.saveCollectionsData(this.collectionsData);
+    try {
+      localStorage.setItem(this.getCollectionStorageKey(newId), JSON.stringify([]));
+    } catch (e) {
+      console.error('Error creating collection storage:', e);
+    }
 
-    // Create empty collection in storage
-    const storageKey = this.getCollectionStorageKey(newId);
-    localStorage.setItem(storageKey, JSON.stringify([]));
-
-    // Update UI
-    this.populateCollectionSelector();
-    this.renderCollectionsList();
-
-    this.showSuccess(`Sammlung "${name}" wurde erstellt`);
     this.newCollectionName.value = '';
+    // A new collection is almost always created to scan into it right away
+    this.switchToCollection(newId, { silent: true });
+    this.showSuccess(`Sammlung „${name}“ erstellt und aktiviert.`);
   }
 
   renderCollectionsList() {
-    this.collectionsList.innerHTML = '';
+    const collections = this.sortedCollections();
+    const onlyOne = collections.length === 1;
 
-    const collections = Object.values(this.collectionsData.collections)
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-    collections.forEach(collection => {
+    this.collectionsList.replaceChildren(...collections.map(collection => {
       const isActive = collection.id === this.collectionsData.activeCollection;
-      const collectionElement = this.createCollectionListItem(collection, isActive);
-      this.collectionsList.appendChild(collectionElement);
-    });
+      const row = createElement('li', `collection-row${isActive ? ' is-active' : ''}`);
+
+      const selectBtn = createElement('button', 'icon-btn');
+      selectBtn.dataset.action = 'select';
+      selectBtn.dataset.id = collection.id;
+      selectBtn.setAttribute('aria-label', `${collection.name} auswählen`);
+      selectBtn.setAttribute('aria-pressed', String(isActive));
+      selectBtn.appendChild(createElement('span', 'select-dot'));
+
+      const info = createElement('div', 'collection-info');
+      const nameLine = createElement('div', 'collection-name-line');
+      nameLine.appendChild(createElement('span', 'collection-name', collection.name));
+      if (isActive) nameLine.appendChild(createElement('span', 'active-tag', 'Aktiv'));
+      const count = collection.cardCount || 0;
+      const modified = new Date(collection.lastModified).toLocaleDateString('de-DE');
+      info.append(nameLine, createElement('span', 'collection-meta',
+        `${count ? plural(count, 'Exemplar', 'Exemplare') : 'Noch leer'} · bearbeitet ${modified}`));
+
+      const renameBtn = createElement('button', 'icon-btn');
+      renameBtn.dataset.action = 'rename';
+      renameBtn.dataset.id = collection.id;
+      renameBtn.setAttribute('aria-label', `${collection.name} umbenennen`);
+      renameBtn.appendChild(createIcon('i-pencil'));
+
+      const deleteBtn = createElement('button', 'icon-btn is-danger');
+      deleteBtn.dataset.action = 'delete';
+      deleteBtn.dataset.id = collection.id;
+      deleteBtn.setAttribute('aria-label', `${collection.name} löschen`);
+      deleteBtn.appendChild(createIcon('i-trash'));
+      if (onlyOne) {
+        deleteBtn.disabled = true;
+        deleteBtn.title = 'Die letzte Sammlung kann nicht gelöscht werden';
+      }
+
+      row.append(selectBtn, info, renameBtn, deleteBtn);
+      return row;
+    }));
   }
 
-  createCollectionListItem(collection, isActive) {
-    const div = document.createElement('div');
-    div.className = `collection-item ${isActive ? 'active' : ''}`;
-
-    const createdDate = new Date(collection.createdAt).toLocaleDateString('de-DE');
-    const lastModifiedDate = new Date(collection.lastModified).toLocaleDateString('de-DE');
-
-    div.innerHTML = `
-      <div class="collection-item-header">
-        <h5 class="collection-name">${this.escapeHtml(collection.name)}</h5>
-        ${isActive ? '<span class="collection-active-badge">Aktiv</span>' : ''}
-      </div>
-      <div class="collection-metadata">
-        <div class="collection-stat">
-          <span>🗓️ Erstellt:</span>
-          <span>${createdDate}</span>
-        </div>
-        <div class="collection-stat">
-          <span>📝 Bearbeitet:</span>
-          <span>${lastModifiedDate}</span>
-        </div>
-        <div class="collection-stat">
-          <span>🎴 Karten:</span>
-          <span>${collection.cardCount}</span>
-        </div>
-        <div class="collection-stat">
-          <span>🆔 ID:</span>
-          <span>${collection.id}</span>
-        </div>
-      </div>
-      <div class="collection-actions">
-        <button class="btn small secondary" onclick="mtgScanner.selectCollection('${collection.id}')">Auswählen</button>
-        <button class="btn small" onclick="mtgScanner.renameCollection('${collection.id}')">Umbenennen</button>
-        <button class="btn small danger" onclick="mtgScanner.deleteCollection('${collection.id}')">Löschen</button>
-      </div>
-    `;
-
-    return div;
+  onCollectionsListClick(e) {
+    const button = e.target.closest('button[data-action]');
+    if (!button) return;
+    const { action, id } = button.dataset;
+    if (action === 'select') this.switchToCollection(id);
+    else if (action === 'rename') this.renameCollection(id);
+    else if (action === 'delete') this.deleteCollection(id);
   }
 
-  selectCollection(collectionId) {
-    this.switchToCollection(collectionId);
-    this.hideCollectionModal();
-  }
-
-  renameCollection(collectionId) {
+  async renameCollection(collectionId) {
     const collection = this.collectionsData.collections[collectionId];
-    if (!collection) {
-      this.showError('Sammlung nicht gefunden');
+    if (!collection) return;
+
+    const newName = await this.confirmAction({
+      title: 'Sammlung umbenennen',
+      confirmLabel: 'Speichern',
+      input: { label: 'Name', value: collection.name }
+    });
+    if (!newName || newName === collection.name) return;
+
+    if (this.isDuplicateCollectionName(newName, collectionId)) {
+      this.showWarning('Eine Sammlung mit diesem Namen gibt es bereits.');
       return;
     }
 
-    const newName = prompt('Neuer Name der Sammlung:', collection.name);
-    if (!newName || newName.trim() === '') {
-      return;
-    }
-
-    const trimmedName = newName.trim();
-
-    // Check for duplicate names (excluding current collection)
-    const existingNames = Object.values(this.collectionsData.collections)
-      .filter(c => c.id !== collectionId)
-      .map(c => c.name.toLowerCase());
-    if (existingNames.includes(trimmedName.toLowerCase())) {
-      this.showWarning('Eine Sammlung mit diesem Namen existiert bereits');
-      return;
-    }
-
-    collection.name = trimmedName;
+    collection.name = newName;
     collection.lastModified = new Date().toISOString();
     this.saveCollectionsData(this.collectionsData);
 
-    // Update UI
     this.populateCollectionSelector();
     this.updateCollectionDisplay();
     this.renderCollectionsList();
-
-    this.showSuccess(`Sammlung wurde umbenannt zu "${trimmedName}"`);
+    this.showSuccess(`Sammlung heißt jetzt „${newName}“.`);
   }
 
-  deleteCollection(collectionId) {
+  async deleteCollection(collectionId) {
     const collection = this.collectionsData.collections[collectionId];
-    if (!collection) {
-      this.showError('Sammlung nicht gefunden');
-      return;
-    }
+    if (!collection) return;
 
-    // Prevent deletion of the last collection
     if (Object.keys(this.collectionsData.collections).length === 1) {
-      this.showWarning('Die letzte Sammlung kann nicht gelöscht werden');
+      this.showWarning('Die letzte Sammlung kann nicht gelöscht werden.');
       return;
     }
 
-    const confirmText = `Sind Sie sicher, dass Sie die Sammlung "${collection.name}" mit ${collection.cardCount} Karten löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.`;
-    if (!confirm(confirmText)) {
-      return;
-    }
+    const count = collection.cardCount || 0;
+    const confirmed = await this.confirmAction({
+      title: `„${collection.name}“ löschen?`,
+      message: count
+        ? `Die Sammlung mit ${plural(count, 'Exemplar', 'Exemplaren')} wird endgültig gelöscht.`
+        : 'Die leere Sammlung wird gelöscht.',
+      confirmLabel: 'Löschen',
+      danger: true
+    });
+    if (!confirmed) return;
 
-    // Remove from collections metadata
     delete this.collectionsData.collections[collectionId];
-
-    // Remove collection data from localStorage
-    const storageKey = this.getCollectionStorageKey(collectionId);
-    localStorage.removeItem(storageKey);
-
-    // If this was the active collection, switch to another one
-    if (this.collectionsData.activeCollection === collectionId) {
-      const remainingCollections = Object.keys(this.collectionsData.collections);
-      if (remainingCollections.length > 0) {
-        this.collectionsData.activeCollection = remainingCollections[0];
-      }
+    try {
+      localStorage.removeItem(this.getCollectionStorageKey(collectionId));
+    } catch (e) {
+      console.error('Error removing collection storage:', e);
     }
 
+    if (this.collectionsData.activeCollection === collectionId) {
+      this.collectionsData.activeCollection = this.sortedCollections()[0].id;
+      this.lastScan = null;
+    }
     this.saveCollectionsData(this.collectionsData);
 
-    // Update UI
-    this.populateCollectionSelector();
     this.loadActiveCollection();
+    this.populateCollectionSelector();
+    this.updateCollectionDisplay();
     this.updateCardCount();
     this.renderCollection();
-    this.updateCollectionDisplay();
     this.renderCollectionsList();
+    this.renderLastScan();
 
-    this.showSuccess(`Sammlung "${collection.name}" wurde gelöscht`);
+    this.showSuccess(`Sammlung „${collection.name}“ wurde gelöscht.`);
   }
 
-  // Update existing save method to work with active collection
   saveCollection() {
     const activeId = this.collectionsData.activeCollection;
     if (!activeId) return;
 
-    const storageKey = this.getCollectionStorageKey(activeId);
-    localStorage.setItem(storageKey, JSON.stringify(this.cards));
+    try {
+      localStorage.setItem(this.getCollectionStorageKey(activeId), JSON.stringify(this.cards));
+    } catch (e) {
+      console.error('Error saving collection:', e);
+      this.showError('Die Sammlung konnte nicht gespeichert werden – der Browser-Speicher ist voll oder gesperrt.');
+      return;
+    }
 
-    // Update collection metadata
     const collection = this.collectionsData.collections[activeId];
     if (collection) {
       collection.lastModified = new Date().toISOString();
@@ -1703,72 +1903,57 @@ ${attemptLines}<br><br>
 
   // Migrate existing single collection to multi-collection system
   migrateExistingCollection() {
-    const oldCollection = localStorage.getItem('mtg-collection');
-    if (oldCollection && oldCollection !== '[]') {
-      try {
-        const cards = JSON.parse(oldCollection);
-        if (cards.length > 0) {
-          console.log('Migrating existing collection to new system...');
-
-          // Find the default collection or create one
-          const collectionsData = this.getCollectionsData();
-          let defaultCollection = Object.values(collectionsData.collections)[0];
-
-          if (!defaultCollection) {
-            const defaultId = this.generateCollectionId();
-            defaultCollection = {
-              id: defaultId,
-              name: 'Meine Sammlung',
-              createdAt: new Date().toISOString(),
-              lastModified: new Date().toISOString(),
-              cardCount: 0
-            };
-            collectionsData.collections[defaultId] = defaultCollection;
-            collectionsData.activeCollection = defaultId;
-          }
-
-          // Migrate cards to new collection
-          const newStorageKey = this.getCollectionStorageKey(defaultCollection.id);
-          localStorage.setItem(newStorageKey, oldCollection);
-
-          // Update collection metadata
-          defaultCollection.cardCount = cards.reduce((sum, card) => sum + (card.count || 1), 0);
-          defaultCollection.lastModified = new Date().toISOString();
-
-          this.saveCollectionsData(collectionsData);
-
-          // Remove old storage
-          localStorage.removeItem('mtg-collection');
-
-          this.showSuccess('Ihre bestehende Sammlung wurde erfolgreich migriert!');
-          console.log('Collection migration completed');
-        }
-      } catch (e) {
-        console.error('Error migrating collection:', e);
-      }
+    let oldCollection;
+    try {
+      oldCollection = localStorage.getItem('mtg-collection');
+    } catch {
+      return;
     }
+    if (!oldCollection || oldCollection === '[]') return;
 
+    try {
+      const cards = JSON.parse(oldCollection);
+      if (cards.length === 0) return;
+
+      const collectionsData = this.getCollectionsData();
+      let defaultCollection = Object.values(collectionsData.collections)[0];
+      if (!defaultCollection) {
+        const defaultId = this.generateCollectionId();
+        defaultCollection = {
+          id: defaultId,
+          name: 'Meine Sammlung',
+          createdAt: new Date().toISOString(),
+          lastModified: new Date().toISOString(),
+          cardCount: 0
+        };
+        collectionsData.collections[defaultId] = defaultCollection;
+        collectionsData.activeCollection = defaultId;
+      }
+
+      localStorage.setItem(this.getCollectionStorageKey(defaultCollection.id), oldCollection);
+      defaultCollection.cardCount = cards.reduce((sum, card) => sum + (card.count || 1), 0);
+      defaultCollection.lastModified = new Date().toISOString();
+      this.saveCollectionsData(collectionsData);
+      localStorage.removeItem('mtg-collection');
+
+      this.showSuccess('Deine bestehende Sammlung wurde übernommen.');
+    } catch (e) {
+      console.error('Error migrating collection:', e);
+    }
   }
 
   // Migrate existing cards to include foil status
   migrateFoilStatus() {
-    if (!this.cards || !Array.isArray(this.cards)) {
-      return;
-    }
+    if (!Array.isArray(this.cards)) return;
 
     let migrationNeeded = false;
-
     this.cards.forEach(card => {
       if (card.isFoil === undefined) {
-        card.isFoil = false; // Default existing cards to normal (non-foil)
+        card.isFoil = false;
         migrationNeeded = true;
       }
     });
-
-    if (migrationNeeded) {
-      console.log('Migrated existing collection to include foil status');
-      this.saveCollection();
-    }
+    if (migrationNeeded) this.saveCollection();
   }
 
   escapeHtml(text) {
