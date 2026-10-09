@@ -17,14 +17,18 @@ const hasLocalCerts = isDevServer
 // Cross-Origin-Resource-Policy header, so those loads get blocked once
 // COEP: require-corp is enabled (needed for SharedArrayBuffer). Vendoring
 // the files this app actually uses (LSTM engine only) into public/ serves
-// them same-origin instead, sidestepping COEP entirely. Copied into
-// public/ (not committed) so it stays in sync with the installed package
-// versions and is present for both `vite dev` and `vite build`.
+// them same-origin instead, sidestepping COEP entirely. The English
+// language data (@tesseract.js-data/eng, the same file Tesseract would
+// fetch from jsdelivr) is vendored too, so the app makes no CDN requests at
+// all - main.js points `langPath` at it. Copied into public/ (not
+// committed) so it stays in sync with the installed package versions and
+// is present for both `vite dev` and `vite build`.
 function vendorTesseractAssets() {
   const files = [
     ['tesseract.js/dist/worker.min.js', 'tesseract/worker.min.js'],
     ['tesseract.js-core/tesseract-core-lstm.wasm.js', 'tesseract/core/tesseract-core-lstm.wasm.js'],
-    ['tesseract.js-core/tesseract-core-simd-lstm.wasm.js', 'tesseract/core/tesseract-core-simd-lstm.wasm.js']
+    ['tesseract.js-core/tesseract-core-simd-lstm.wasm.js', 'tesseract/core/tesseract-core-simd-lstm.wasm.js'],
+    ['@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata.gz', 'tesseract/lang/eng.traineddata.gz']
   ];
 
   return {

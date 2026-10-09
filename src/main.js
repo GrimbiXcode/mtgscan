@@ -807,6 +807,9 @@ class MTGScanner {
           // blocked by COEP: require-corp once cross-origin isolation is enabled.
           workerPath: '/tesseract/worker.min.js',
           corePath: '/tesseract/core',
+          // English language data, self-hosted as well (vite.config.js
+          // vendorTesseractAssets) instead of Tesseract's jsdelivr default
+          langPath: '/tesseract/lang',
           logger: m => {
             if (m.status === 'recognizing text') {
               this.updateStatus('Text wird gelesen …', 20 + m.progress * 70);
