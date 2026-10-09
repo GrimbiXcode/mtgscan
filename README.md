@@ -22,12 +22,13 @@ A sophisticated yet simple Magic: The Gathering card scanner that captures cards
 - **📤 Moxfield Export**: Generate CSV files compatible with popular MTG platforms
 
 ### 🎨 **User Experience**
-- **📐 Adjustable Frame Size**: Customize scanning area for different card sizes and distances
-- **🎭 Visual Foil Effects**: Modal UI reflects foil status with shimmer effects
-- **🔔 Smart Notifications**: Contextual success, warning, and error messages
-- **📱 Mobile-First Design**: Optimized for phones with responsive desktop support
-- **🛠️ Debug Mode**: Advanced troubleshooting tools for OCR analysis
-- **⚡ Performance Optimized**: Image caching and lazy loading for smooth operation
+- **⚙️ "Filigran-Werkstatt" Design**: Teal, brass and cream theme with self-hosted fonts and a bottom tab bar (Scannen · Sammlung · Werkstatt)
+- **👆 One Tap per Card**: Scan → "Hinzufügen"; Normal/Foil and quantity right in the result sheet
+- **✏️ Never a Dead End**: If a number can't be read, the sheet shows the crop and lets you type it ("FDN 125" is enough) - or enter numbers without scanning at all
+- **↩️ Undo**: Removing a card or clearing a collection can be undone from the notification
+- **🔎 Collection Search**: Filter the active collection by card or set name
+- **📱 Mobile-First Design**: Bottom sheet on phones, centered dialogs on desktop, 44px touch targets
+- **🛠️ Debug Mode**: Switch in the Werkstatt tab for OCR intermediate images and scores
 
 ## 🌟 Why Collector Numbers?
 
@@ -72,26 +73,27 @@ If not, you may have to generate certificate files by yourself.
 
 ## 📱 How to Use
 
-1. **Start Camera**: Tap "📷 Kamera starten" to begin
-2. **Position Card**: Align card within the red frame guide
-3. **Focus on Collector Number**: Ensure the collector number (bottom-left) is in the yellow highlighted area
-4. **Capture**: Tap "📸 Karte scannen"
-5. **Review & Add**: Verify the recognized card and add to your collection
+1. **Start Camera**: Tap the brass button ("Kamera starten")
+2. **Position Card**: Keep the collector number (bottom-left on the card) sharp and readable - the dashed outline is only a guide
+3. **Capture**: Tap the same button again ("Scannen")
+4. **Review & Add**: Check the card in the result sheet, pick Normal/Foil and tap "Hinzufügen"
 
-### Alternative: Upload Images
+### Alternatives
 
-Don't have a card handy? Use "📁 Bild hochladen" to test with existing card photos.
+- **Foto**: Scan an existing photo instead of using the camera
+- **Eingeben**: Type a collector number (e.g. "FDN 125") without scanning
 
 ## 🏗️ Project Structure
 
 ```
 mtgscan/
-├── index.html                    # Main HTML structure with modal support
+├── index.html                    # App shell: views, tab bar, card sheet and dialogs
 ├── src/
 │   ├── main.js                   # Core application logic (MTGScanner class)
 │   └── recognition/              # DOM-free recognition pipeline (text localization, parsing, orchestration)
 ├── public/
-│   ├── style.css                 # Responsive styling with foil effects
+│   ├── style.css                 # "Filigran-Werkstatt" theme (also used by the legal pages)
+│   ├── fonts/                    # Self-hosted fonts (SIL OFL)
 │   ├── privacy.html              # Privacy policy (German)
 │   ├── terms.html                # Terms of use (German)
 │   ├── imprint.html              # Legal imprint (German)
@@ -291,6 +293,7 @@ Ask yourself:
 ## 📋 Roadmap & Recent Achievements
 
 ### ✅ **Recently Completed (2026)**
+- [x] **Redesign "Filigran-Werkstatt"**: New theme, tab navigation, result sheet with one-tap add, correction sheet with crop preview, manual entry, undo, collection search, camera auto-stop/resume
 - [x] **Collector-Text Localization**: The collector number is found anywhere in the photo instead of assuming the card fills the frame - 22/22 benchmark fixtures, incl. hand-held, sleeved, foil and table photos (October 2026)
 - [x] **Real Multi-Attempt Recognition**: Several located candidates tried per scan and ranked by OCR plausibility, with fallback to the next-best Scryfall match on a miss
 - [x] **Recognition Accuracy Benchmark**: `npm run benchmark` measures the real pipeline end-to-end against photo fixtures (superseded the old name-OCR-era testing framework)
@@ -300,11 +303,9 @@ Ask yourself:
 ### ✅ **Recently Completed (2025)**
 - [x] **Multi-Collection System**: Create, manage, and switch between unlimited collections
 - [x] **Language Detection**: Automatic recognition of card language from collector numbers
-- [x] **Visual Foil Effects**: Modal UI with shimmer effects for foil cards
 - [x] **Docker Production Setup**: Complete containerization with NGINX
 - [x] **Adjustable Frame Sizing**: Customizable scanning area for different use cases
 - [x] **Image Upload Support**: Scan existing photos in addition to live camera
-- [x] **Advanced Image Caching**: Intelligent localStorage management with auto-cleanup
 - [x] **Collection Migration**: Seamless upgrade path preserving existing data
 
 ### 🚀 **Future Enhancements**

@@ -20,16 +20,17 @@ A simplified Magic: The Gathering card scanner that focuses on core functionalit
 
 ```
 mtgscan/
-├── index.html                    # Main HTML structure with modal support
+├── index.html                    # App shell: 3 views (Scannen/Sammlung/Werkstatt), tab bar, card sheet + confirm <dialog>s, inline SVG icon sprite
 ├── src/
-│   ├── main.js                   # App/UI logic (MTGScanner class): camera, collections, modals
+│   ├── main.js                   # App/UI logic (MTGScanner class): navigation, camera, card sheet, collections, notifications
 │   └── recognition/               # Pure, DOM-free recognition pipeline (see below)
 │       ├── canvasUtil.js         # createCanvas() abstraction (browser <canvas> vs. node-canvas)
 │       ├── textLocator.js        # Finds the collector-text block anywhere in the photo, crops + binarizes it
 │       ├── parsing.js            # OCR text cleanup, scoring, and collector-number parsing
 │       └── pipeline.js           # Orchestrates the above into generateDetectionVariants
 ├── public/
-│   ├── style.css                 # Clean, responsive styling
+│   ├── style.css                 # "Filigran-Werkstatt" theme (tokens on :root), also styles the legal pages
+│   ├── fonts/                    # Self-hosted Karla, Marcellus, Space Mono (woff2, SIL OFL) - no Google Fonts requests
 │   ├── privacy.html              # Privacy policy (German)
 │   ├── terms.html                # Terms of use (German)
 │   ├── imprint.html              # Legal imprint (German)
@@ -76,10 +77,11 @@ around it - it does not contain any pixel-processing logic itself.
 ## Key Features
 
 ### 1. Camera Integration
-- **Full viewport display**: Shows complete camera feed, not cropped
-- **Visual guides**: Red frame for card positioning, yellow area for collector number region
+- **Full camera feed** (`object-fit: contain`), not cropped
+- **Visual guides**: dashed card outline with a brass box marking the collector-number corner - guidance only, the locator searches the whole photo
 - **Environment camera**: Automatically uses back camera on mobile devices
 - **High resolution**: Captures at optimal quality for OCR
+- **Lifecycle**: the camera only runs while the Scannen tab is visible and the page is in the foreground (stopped on tab switch / `visibilitychange`, resumed on return). If it was on last time and permission is already granted, it starts automatically on load (`mtg-camera-enabled` in localStorage) - never a permission prompt on page load
 
 ### 2. Collector-Text Localization (`src/recognition/textLocator.js`)
 - Works on hand-held, sleeved, on-the-table and tightly cropped photos alike - no fixed crop region, no card-edge detection
@@ -116,24 +118,57 @@ order, and on a low-confidence or failed match shows an editable
 
 ## UI/UX Design
 
-### Visual Hierarchy
-1. **Header**: App title and recognition method indicator ("Language Independent")
-2. **Camera Section**: Live preview with positioning guides
-3. **Processing**: Progress bar and status updates
-4. **Results**: Card preview, confidence badge (medium/low matches only), and add/retry options - or an editable collector-number field if no card was found
-5. **Collection**: Grid display with basic management
+### Theme: "Filigran-Werkstatt" (October 2026)
+Deep teal ground, brass accents, cream "paper" for sheets and dialogs;
+Marcellus for display type, Karla for UI text, Space Mono for collector
+numbers and counts. All colours are custom properties on `:root` in
+`public/style.css`; icons are an inline SVG sprite in `index.html`
+(`<svg class="icon"><use href="#i-…">`), not emoji. The design canvas with
+all screens lives outside the repo (claude.ai artifact).
+
+### Structure
+A bottom tab bar switches between three views (`showView()`):
+1. **Scannen**: camera stage (idle / live / frozen photo), three labelled
+   controls (Foto · Scannen/Kamera starten · Eingeben), a processing panel
+   with three steps (find number → read text → Scryfall) and a "Zuletzt
+   gescannt" row to reopen the last card
+2. **Sammlung**: active collection's cards (newest first) with search,
+   inline quantity steppers, export and clear
+3. **Werkstatt**: collection management (create, select, rename, delete),
+   the debug-tools switch with the debug panel, legal links and disclaimer
+
+The header always shows the active collection as a native `<select>`.
+
+### Card Sheet (`#cardModal`, a modal `<dialog>`)
+- **Found**: image, localized name (`printedName`), set, language, collector
+  chip, confidence hint for MEDIUM/LOW with a "Korrigieren" shortcut,
+  Normal/Foil segmented control, quantity stepper with "vorher" and delta
+- The primary button is **"Hinzufügen"** (adds one copy and closes) until
+  the quantity was changed in the sheet, then **"Fertig"** - one tap per
+  card for the common case, nothing is added by just looking
+- **Not found / no text / manual entry / fix**: the same sheet shows the
+  crop that was read, the OCR readings that were tried, and an input that
+  accepts short forms ("FDN 125"); errors are shown inline (parse vs.
+  not found vs. Scryfall unreachable via `lastLookupError`)
+
+### Feedback & Safety
+- Toasts (max. 3) only for things the UI doesn't already show; quantity
+  changes are silent
+- Removing a card or clearing a collection offers **"Rückgängig"** in the
+  toast; deleting a collection asks first via the styled `confirmAction()`
+  dialog (which also replaces `prompt()` for renaming)
 
 ### Responsive Design
-- Mobile-first approach
-- Touch-friendly buttons
-- Flexible card grid
-- Collapsible sections on smaller screens
+- Mobile-first; touch targets ≥44px; `env(safe-area-inset-bottom)` for the tab bar
+- Card grid `auto-fill, minmax(156px, 1fr)` - 2 columns on phones, more on desktop
+- The sheet is a bottom sheet on phones and a centered dialog from 700px
+- `prefers-reduced-motion` disables animations
 
 ### User Flow
 ```
-Start Camera → Position Card → Capture → Detect Region (multi-variant) → OCR (ranked) → Scryfall Lookup (tries top 3) → Add to Collection
-                                                                                              ↓ (all miss)
-                                                                                    Editable manual-correction field
+Start Camera / Foto / Eingeben → Capture → Locate (highlighted on the frozen photo) → OCR (ranked) → Scryfall Lookup (tries top 3) → Card sheet → "Hinzufügen"
+                                                                                                                       ↓ (all miss)
+                                                                                                    Correction sheet (crop + tried readings + input)
 ```
 
 ## Technical Decisions
@@ -181,10 +216,11 @@ Before adding any new feature, ask:
 4. Will users actually use this?
 
 ### Performance
-- Lazy load Tesseract.js only when needed: `main.js` does `import('tesseract.js')` on first OCR (npm package, not a CDN script) and keeps that one worker for the session, and the vite `vendorTesseractAssets` plugin copies its worker/core files into `public/tesseract/` so they load same-origin under `COEP: require-corp`; only the English language data still comes from the jsdelivr CDN (fetched via CORS, which COEP allows)
+- Lazy load Tesseract.js only when needed: `main.js` does `import('tesseract.js')` on first OCR (npm package, not a CDN script) and keeps that one worker for the session, and the vite `vendorTesseractAssets` plugin copies its worker/core files and the English language data (`@tesseract.js-data/eng`, `4.0.0_best_int`, ~3MB gzipped) into `public/tesseract/` so everything loads same-origin under `COEP: require-corp` - the app makes no CDN requests (`langPath: '/tesseract/lang'` in `getOcrWorker()`). Tesseract caches the language data in IndexedDB after the first scan. The benchmark reads the same file straight from `node_modules`
 - Use canvas for image processing; keep debug images as canvases and only `toDataURL()` them when the debug panel shows them (encoding a 12MP photo costs hundreds of ms)
-- Store collection in localStorage
-- Minimal DOM manipulation
+- Store collection in localStorage. Card images are plain `<img crossorigin="anonymous" loading="lazy">` URLs (Scryfall sends CORS headers, which COEP needs) and use the browser cache - they used to be stored as data URLs in localStorage, which filled the quota after a few dozen cards; `purgeLegacyImageCache()` removes those old `card-image-*` keys
+- The Scryfall set list is fetched once a day; a stale cached copy is used when offline, and scans wait for it (`collectionRegexReady`) before parsing
+- Minimal DOM manipulation: quantity changes in the grid update the tile in place (keeps keyboard focus); lists use event delegation, no inline `onclick`
 
 ## File Structure Details
 
@@ -195,7 +231,7 @@ Before adding any new feature, ask:
 - Accessible form elements
 
 ### `src/main.js`
-- Single class architecture (camera, UI, collections, modals)
+- Single class architecture (navigation, camera, card sheet, collections, notifications)
 - Delegates all pixel-processing to `src/recognition/*`
 - Clear method separation
 - Event-driven flow
@@ -283,17 +319,16 @@ The app now supports multiple collections with full CRUD operations:
 ```
 
 **Key Features:**
-- **Collection Management Modal**: Create, rename, delete collections
-- **Collection Selector**: Dropdown to switch between collections
+- **Collection management in the Werkstatt tab**: Create (and switch to), select, rename, delete
+- **Collection Selector**: native `<select>` in the header to switch between collections
 - **Metadata Tracking**: Creation date, last modified, card count
 - **Automatic Migration**: Existing collections are migrated seamlessly
 - **Responsive Design**: Mobile-friendly collection management
 
 **UI Components:**
-- Collection header with name and card count
-- Collection dropdown selector
-- "Sammlungen verwalten" button opens management modal
-- Modal shows all collections with metadata and actions
+- Sammlung view heading with name and "N Karten · M Exemplare"
+- Header collection selector
+- Werkstatt list rows: select dot, name + "Aktiv" tag, copies + last-modified date, rename/delete icon buttons
 
 **Safety Features:**
 - Cannot delete the last remaining collection
@@ -444,7 +479,7 @@ stripping zeros before comparing).
   and star handling (see Key Features 4).
 - One reused Tesseract worker instead of a new one per OCR attempt.
 - The foil heuristic was removed: it never fired on any fixture, foil or
-  not. Foil status is set with the toggle in the card modal. (On the card,
+  not. Foil status is set with the Normal/Foil control in the card sheet. (On the card,
   the separator is "★" for foil vs "•" for non-foil - a possible future
   signal, but OCR reads both as "*" and the star's shape alone wasn't
   separable from letters on the two foil fixtures.)
