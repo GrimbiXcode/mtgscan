@@ -35,6 +35,7 @@ const GAUGE_PATHS = {
 
 const DEFAULT_CARD_IMAGE = '/assets/default-card.png';
 const CAMERA_PREF_KEY = 'mtg-camera-enabled';
+const CAMERA_ASPECT_KEY = 'mtg-camera-aspect';
 const DEBUG_PREF_KEY = 'mtg-debug-enabled';
 const SET_REGEX_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const MAX_NOTIFICATIONS = 3;
@@ -87,6 +88,7 @@ class MTGScanner {
     this.searchQuery = '';
     this.previewScale = 1;
     this.lastLookupError = null;
+    this.stageWidth = 0;
 
     // Debug data of the last scan (see performCollectorNumberOCRWithFallback)
     this.debugData = {
@@ -112,6 +114,10 @@ class MTGScanner {
     this.collectionRegexReady = this.initCollectionRecognitions();
 
     this.restoreDebugPreference();
+    // The last camera's aspect ratio sizes the stage right away, so it
+    // doesn't jump when the camera (re)starts
+    this.streamAspect = parseFloat(this.loadPreference(CAMERA_ASPECT_KEY)) || null;
+    this.layoutStage();
     this.setStageState('idle');
     this.updateCaptureButton();
     this.autoStartCamera();
@@ -132,6 +138,8 @@ class MTGScanner {
     this.video = $('video');
     this.stage = $('stage');
     this.stagePreview = $('stagePreview');
+    this.stageFrame = $('stageFrame');
+    this.cardGuide = $('cardGuide');
     this.captureCardBtn = $('captureCard');
     this.captureLabel = $('captureLabel');
     this.stopCameraBtn = $('stopCamera');
@@ -254,6 +262,17 @@ class MTGScanner {
       if (this.lastScan) this.openCardSheet(this.lastScan, { reopened: true });
     });
 
+    // Camera image layout: on the stream's real size, rotation and width changes
+    this.video.addEventListener('loadedmetadata', () => this.updateStreamAspect());
+    this.video.addEventListener('resize', () => this.updateStreamAspect());
+    window.addEventListener('resize', () => this.layoutStage());
+    if (window.ResizeObserver) {
+      // Only width changes matter - layoutStage sets the height itself
+      new ResizeObserver(() => {
+        if (this.stage.clientWidth !== this.stageWidth) this.layoutStage();
+      }).observe(this.stage);
+    }
+
     // Don't keep the camera (and its light) running in a background tab
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && this.stream) {
@@ -373,6 +392,7 @@ class MTGScanner {
     if (name === 'workshop') this.renderCollectionsList();
 
     this.currentView = name;
+    if (name === 'scan') this.layoutStage();
     window.scrollTo(0, 0);
   }
 
@@ -410,6 +430,58 @@ class MTGScanner {
 
   setStageState(state) {
     this.stage.dataset.state = state;
+  }
+
+  updateStreamAspect() {
+    const { videoWidth, videoHeight } = this.video;
+    if (!videoWidth || !videoHeight) return;
+    const aspect = videoWidth / videoHeight;
+    if (Math.abs(aspect - (this.streamAspect || 0)) > 0.001) {
+      this.streamAspect = aspect;
+      this.savePreference(CAMERA_ASPECT_KEY, aspect.toFixed(4));
+    }
+    this.layoutStage();
+  }
+
+  // Sizes the stage to the camera's aspect ratio (capped at 60% of the
+  // viewport height) and places the video + card guide frame exactly on the
+  // visible camera image. Explicit pixel sizes instead of object-fit: iOS
+  // Safari drew a restarted stream at the wrong size inside a 100% box.
+  layoutStage() {
+    const width = this.stage.clientWidth;
+    this.stageWidth = width;
+    if (!this.streamAspect || !width) return; // no camera yet / view hidden: CSS default
+
+    const aspect = this.streamAspect;
+    const border = this.stage.offsetHeight - this.stage.clientHeight;
+    const maxHeight = Math.min(window.innerHeight * 0.6, 640);
+    const height = Math.round(Math.max(240, Math.min(width / aspect, maxHeight)));
+    this.stage.style.height = `${height + border}px`;
+
+    let frameWidth = width;
+    let frameHeight = width / aspect;
+    if (frameHeight > height) {
+      frameHeight = height;
+      frameWidth = height * aspect;
+    }
+    Object.assign(this.stageFrame.style, {
+      width: `${frameWidth}px`,
+      height: `${frameHeight}px`,
+      left: `${(width - frameWidth) / 2}px`,
+      top: `${(height - frameHeight) / 2}px`
+    });
+
+    // Card outline: 80% of the image height, never wider than 86% of it
+    let guideHeight = frameHeight * 0.8;
+    let guideWidth = guideHeight * 63 / 88;
+    if (guideWidth > frameWidth * 0.86) {
+      guideWidth = frameWidth * 0.86;
+      guideHeight = guideWidth * 88 / 63;
+    }
+    Object.assign(this.cardGuide.style, {
+      width: `${guideWidth}px`,
+      height: `${guideHeight}px`
+    });
   }
 
   updateCaptureButton() {
@@ -464,8 +536,10 @@ class MTGScanner {
       }
 
       this.video.srcObject = this.stream;
-      await this.video.play().catch(() => {});
       this.setStageState('live');
+      this.updateCaptureButton(); // scan button ready together with the live image
+      await this.video.play().catch(() => {});
+      this.updateStreamAspect();
       this.savePreference(CAMERA_PREF_KEY, '1');
       await this.checkFlashCapability();
     } catch (error) {

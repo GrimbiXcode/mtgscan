@@ -77,8 +77,8 @@ around it - it does not contain any pixel-processing logic itself.
 ## Key Features
 
 ### 1. Camera Integration
-- **Full camera feed** (`object-fit: contain`), not cropped
-- **Visual guides**: dashed card outline with a brass box marking the collector-number corner - guidance only, the locator searches the whole photo
+- **Full camera feed**, not cropped: `layoutStage()` sizes the stage to the stream's aspect ratio (capped at 60% of the viewport height, last ratio remembered in `mtg-camera-aspect` so it doesn't jump) and places `#stageFrame` (video + card guide) on the exact image rect in pixels. Don't go back to `object-fit` on a full-stage `<video>`: iOS Safari drew a restarted stream (after a tab switch) at the wrong size. The frame is hidden with `visibility`, never `display: none`
+- **Visual guides**: dashed card outline (80% of the image height) with a brass box marking the collector-number corner - guidance only, the locator searches the whole photo. The hint text sits at the top so it never covers that corner
 - **Environment camera**: Automatically uses back camera on mobile devices
 - **High resolution**: Captures at optimal quality for OCR
 - **Lifecycle**: the camera only runs while the Scannen tab is visible and the page is in the foreground (stopped on tab switch / `visibilitychange`, resumed on return). If it was on last time and permission is already granted, it starts automatically on load (`mtg-camera-enabled` in localStorage) - never a permission prompt on page load

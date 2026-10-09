@@ -66,6 +66,21 @@ async function mockNetwork(context, cdnRequests) {
 }
 
 const stageState = page => page.$eval('#stage', el => el.dataset.state);
+
+// Rects of the stage and the camera image frame, plus the stream's size
+const cameraLayout = page => page.evaluate(() => {
+  const rect = el => {
+    const r = el.getBoundingClientRect();
+    return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) };
+  };
+  const video = document.getElementById('video');
+  return {
+    stage: rect(document.getElementById('stage')),
+    frame: rect(document.getElementById('stageFrame')),
+    guide: rect(document.getElementById('cardGuide')),
+    videoAspect: video.videoWidth / video.videoHeight
+  };
+});
 const text = async (page, selector) => (await page.textContent(selector))?.trim();
 
 async function run() {
@@ -195,6 +210,16 @@ async function run() {
     await page.waitForFunction(() => document.getElementById('stage').dataset.state === 'live');
     check('camera: live', true);
     check('camera: capture button scans now', await text(page, '#captureLabel') === 'Scannen');
+    await page.waitForFunction(() => document.getElementById('video').videoWidth > 0);
+    const liveLayout = await cameraLayout(page);
+    const { stage, frame, guide } = liveLayout;
+    check('camera: image frame has the stream aspect ratio',
+      Math.abs(frame.w / frame.h - liveLayout.videoAspect) < 0.02, `${frame.w}×${frame.h} vs ${liveLayout.videoAspect.toFixed(3)}`);
+    check('camera: image frame fills the stage width or height',
+      frame.x >= stage.x && frame.y >= stage.y && frame.x + frame.w <= stage.x + stage.w && frame.y + frame.h <= stage.y + stage.h
+      && (Math.abs(frame.w - (stage.w - 2)) <= 1 || Math.abs(frame.h - (stage.h - 2)) <= 1), JSON.stringify({ stage, frame }));
+    check('camera: card guide inside the image',
+      guide.x >= frame.x && guide.y >= frame.y && guide.x + guide.w <= frame.x + frame.w && guide.y + guide.h <= frame.y + frame.h);
     await shot(page, '05-camera-live');
     await page.click('#captureCard');
     await page.waitForSelector('#cardModal[open]', { timeout: 60000 });
@@ -206,6 +231,14 @@ async function run() {
     await page.click('.tab[data-view="scan"]');
     await page.waitForFunction(() => document.getElementById('stage').dataset.state === 'live');
     check('camera: resumes on return', true);
+    // Regression: on iOS the restarted stream showed up at a different size
+    await page.waitForFunction(() => document.getElementById('video').videoWidth > 0);
+    await page.waitForTimeout(200);
+    const resumedLayout = await cameraLayout(page);
+    check('camera: same image size after tab switch',
+      JSON.stringify(resumedLayout.frame) === JSON.stringify(liveLayout.frame)
+      && JSON.stringify(resumedLayout.stage) === JSON.stringify(liveLayout.stage),
+      `${JSON.stringify(liveLayout.frame)} → ${JSON.stringify(resumedLayout.frame)}`);
     await page.reload();
     await page.waitForFunction(() => document.getElementById('stage').dataset.state === 'live', null, { timeout: 5000 })
       .then(() => check('camera: auto-starts after reload', true))
