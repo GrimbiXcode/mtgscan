@@ -351,8 +351,16 @@ The app now supports multiple collections with full CRUD operations:
 ### Testing During Development
 **Important**: For testing purposes, do not start the web server with `npm run dev` - the web server should already be running during development. Only run scripts and check functionality without restarting the server.
 
+### Branches and Tests Before Every Merge
+Work goes feature branch → `test` (test system, checked by the project
+owner) → `main` (production) only after the owner's explicit approval,
+always as merge commits. Before **every** merge run `npm test` (benchmark
+at full resolution and 1280px, plus the UI smoke test
+`sandbox/ui-smoke.mjs`, see `CLAUDE.md`) and fix failures in the code, not
+in the tests. The full procedure is in `CLAUDE.md`.
+
 ### Testing the Recognition Pipeline
-There is no unit test suite; accuracy is checked with `npm run benchmark`
+There is no unit test suite (UI flows are covered by `npm run test:ui`); accuracy is checked with `npm run benchmark`
 (`sandbox/benchmark.js`), which runs the real localization → binarization →
 OCR → parsing pipeline in Node against the photos in
 `sandbox/test-images/` and checks the parsed set/collector-number against
