@@ -63,12 +63,14 @@
                     <svg class="stage-ornament bl" aria-hidden="true"><use href="#i-filigree"></use></svg>
                     <svg class="stage-ornament br" aria-hidden="true"><use href="#i-filigree"></use></svg>
 
-                    <video id="video" class="stage-video" autoplay playsinline muted></video>
-                    <canvas id="stagePreview" class="stage-preview"></canvas>
-
-                    <div class="card-guide" aria-hidden="true">
-                        <span class="card-guide-zone"></span>
+                    <!-- Sized by MTGScanner.layoutStage() to exactly the visible camera image -->
+                    <div id="stageFrame" class="stage-frame">
+                        <video id="video" class="stage-video" autoplay playsinline muted></video>
+                        <div id="cardGuide" class="card-guide" aria-hidden="true">
+                            <span class="card-guide-zone"></span>
+                        </div>
                     </div>
+                    <canvas id="stagePreview" class="stage-preview"></canvas>
 
                     <div class="stage-idle">
                         <svg class="stage-idle-mark" aria-hidden="true"><use href="#i-brand"></use></svg>
@@ -76,7 +78,7 @@
                         <p class="stage-idle-text">Starte die Kamera oder lade ein Foto hoch. Die Sammlernummer unten links auf der Karte muss lesbar sein.</p>
                     </div>
 
-                    <p class="stage-hint">Sammlernummer unten links gut sichtbar halten</p>
+                    <p class="stage-hint">Sammlernummer lesbar halten</p>
 
                     <button id="flashToggle" class="stage-btn stage-btn-left" aria-label="Licht einschalten" aria-pressed="false" hidden>
                         <svg class="icon" aria-hidden="true"><use href="#i-flash"></use></svg>
