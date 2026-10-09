@@ -90,6 +90,11 @@ async function run() {
 
     // --- Start screen
     await page.goto(BASE);
+    // A stale cached stylesheet once made the redesign show up unstyled:
+    // the link must carry the content hash and the theme must be applied
+    const stylesheet = await page.$eval('link[rel="stylesheet"]', el => el.getAttribute('href'));
+    check('start: stylesheet link is versioned', /^\/style\.css\?v=[0-9a-f]{12}$/.test(stylesheet), stylesheet);
+    check('start: theme applied', await page.$eval('body', el => getComputedStyle(el).backgroundColor) === 'rgb(14, 42, 44)');
     check('start: stage idle', await stageState(page) === 'idle');
     check('start: capture button offers the camera', await text(page, '#captureLabel') === 'Kamera starten');
     await shot(page, '01-start');
@@ -147,11 +152,19 @@ async function run() {
     await page.click('.collection-row.is-active button[data-action="rename"]');
     await page.fill('#confirmInput', 'Tauschordner');
     await page.press('#confirmInput', 'Enter');
+    // A <dialog>'s close event fires in a later task, so the rename lands a
+    // moment after Enter - wait for it instead of reading right away
+    const renamed = await page.waitForFunction(() => {
+      const current = [...document.querySelectorAll('.collection-name')].map(el => el.textContent);
+      return current.includes('Tauschordner') && !current.includes('Commander-Deck');
+    }, null, { timeout: 3000 }).then(() => true, () => false);
     const names = await page.$$eval('.collection-name', els => els.map(el => el.textContent));
-    check('workshop: rename via dialog', names.includes('Tauschordner') && !names.includes('Commander-Deck'), names.join(', '));
+    check('workshop: rename via dialog', renamed, names.join(', '));
     await page.click('.collection-row.is-active button[data-action="delete"]');
     check('workshop: delete asks first', await page.$eval('#confirmDialog', d => d.open));
     await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.getElementById('confirmDialog').open);
+    await page.waitForTimeout(100); // let a (wrong) delete run before counting
     check('workshop: cancel keeps the collection', (await page.$$eval('.collection-name', els => els.length)) === 2);
     await page.click('#toggleDebug');
     check('workshop: debug switch', await page.isVisible('#debugSection')
@@ -206,6 +219,8 @@ async function run() {
     await page.goto(`${BASE}/privacy.html`);
     const background = await page.$eval('body', el => getComputedStyle(el).backgroundColor);
     check('legal page: uses the app stylesheet', background === 'rgb(14, 42, 44)', background);
+    const legalStylesheet = await page.$eval('link[rel="stylesheet"]', el => el.getAttribute('href'));
+    check('legal page: stylesheet link is versioned', legalStylesheet === stylesheet, legalStylesheet);
 
     check('no requests to jsdelivr', cdnRequests.length === 0, cdnRequests.join(', '));
     check('no uncaught page errors', pageErrors.length === 0, pageErrors.join(' | '));

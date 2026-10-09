@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv } from 'vite';
 import fs from 'fs';
 import path from 'path';
+import { createHash } from 'crypto';
 
 // Local HTTPS (via localhost.pem/localhost-key.pem) is only for the dev
 // server on developer machines. Production is deployed behind Coolify's
@@ -70,9 +71,12 @@ function renderLegalValue(key, raw) {
 
 function legalOperatorDetails() {
   let env = {};
-  const middleware = (req, res, next) => {
+  // `vite dev` renders the sources in public/; `vite preview` the built
+  // copies in dist/, which is what production serves (e.g. with the
+  // versioned stylesheet link from versionStylesheetLinks).
+  const middleware = (dirs) => (req, res, next) => {
     const url = (req.url ?? '').split('?')[0];
-    const candidates = [path.resolve('public', '.' + url), path.resolve('dist', '.' + url)];
+    const candidates = dirs.map((dir) => path.resolve(dir, '.' + url));
     const file = url.endsWith('.html') && candidates.find((f) => fs.existsSync(f));
     if (!file) return next();
     const html = fs.readFileSync(file, 'utf-8');
@@ -87,17 +91,50 @@ function legalOperatorDetails() {
       env = { ...loadEnv(config.mode, process.cwd(), 'LEGAL_OPERATOR_'), ...process.env };
     },
     configureServer(server) {
-      server.middlewares.use(middleware);
+      server.middlewares.use(middleware(['public', 'dist']));
     },
     configurePreviewServer(server) {
-      server.middlewares.use(middleware);
+      server.middlewares.use(middleware(['dist', 'public']));
+    }
+  };
+}
+
+// public/style.css keeps its name in the build, so a browser or proxy may
+// keep serving an old copy after a deploy - the redesign showed up on the
+// test system with the new HTML but the cached old stylesheet. The built
+// HTML pages (index.html and the legal pages copied from public/) therefore
+// link it with a content hash, `style.css?v=<hash>`: every CSS change gets a
+// new URL. `vite dev` serves the plain link, nothing is cached there.
+function versionStylesheetLinks() {
+  let version = '';
+  const versioned = (html) => html.replace(/href="\/?style\.css"/g, `href="/style.css?v=${version}"`);
+
+  return {
+    name: 'version-stylesheet-links',
+    apply: 'build',
+    buildStart() {
+      version = createHash('sha256').update(fs.readFileSync('public/style.css')).digest('hex').slice(0, 12);
+    },
+    transformIndexHtml: {
+      order: 'post',
+      handler: versioned
+    },
+    // The legal pages are plain files from public/ - rewrite their copies
+    closeBundle() {
+      const outDir = path.resolve('dist');
+      for (const file of fs.readdirSync('public').filter(name => name.endsWith('.html'))) {
+        const target = path.join(outDir, file);
+        if (fs.existsSync(target)) {
+          fs.writeFileSync(target, versioned(fs.readFileSync(target, 'utf-8')));
+        }
+      }
     }
   };
 }
 
 export default defineConfig({
   root: '.',
-  plugins: [vendorTesseractAssets(), legalOperatorDetails()],
+  plugins: [vendorTesseractAssets(), legalOperatorDetails(), versionStylesheetLinks()],
   server: {
     port: 3000,
     host: true, // Allow external connections for mobile testing
