@@ -95,6 +95,8 @@ async function run() {
     const stylesheet = await page.$eval('link[rel="stylesheet"]', el => el.getAttribute('href'));
     check('start: stylesheet link is versioned', /^\/style\.css\?v=[0-9a-f]{12}$/.test(stylesheet), stylesheet);
     check('start: theme applied', await page.$eval('body', el => getComputedStyle(el).backgroundColor) === 'rgb(14, 42, 44)');
+    check('start: app is called MTG Scan', await page.title() === 'MTG Scan'
+      && await text(page, '.brand-name') === 'MTG Scan', `${await page.title()} / ${await text(page, '.brand-name')}`);
     check('start: stage idle', await stageState(page) === 'idle');
     check('start: capture button offers the camera', await text(page, '#captureLabel') === 'Kamera starten');
     await shot(page, '01-start');
@@ -219,6 +221,7 @@ async function run() {
     await page.goto(`${BASE}/privacy.html`);
     const background = await page.$eval('body', el => getComputedStyle(el).backgroundColor);
     check('legal page: uses the app stylesheet', background === 'rgb(14, 42, 44)', background);
+    check('legal page: title names MTG Scan', (await page.title()).endsWith('- MTG Scan'), await page.title());
     const legalStylesheet = await page.$eval('link[rel="stylesheet"]', el => el.getAttribute('href'));
     check('legal page: stylesheet link is versioned', legalStylesheet === stylesheet, legalStylesheet);
 

@@ -1,4 +1,4 @@
-# MTG Scanner - Agent Guide
+# MTG Scan - Agent Guide
 
 This file is the generic, tool-agnostic architecture/dev guide for coding
 agents working in this repo (Claude, Cursor, Codex, Warp, etc.). It was

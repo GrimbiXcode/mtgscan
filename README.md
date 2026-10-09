@@ -1,4 +1,4 @@
-# 🎴 MTG Scanner
+# 🎴 MTG Scan
 
 > ⚠️ **Unofficial Fan Project** • No affiliation with Wizards of the Coast, Magic: The Gathering, or Hasbro • All card data from Scryfall API
 
@@ -38,7 +38,7 @@ Traditional MTG scanners struggle with card names due to:
 - Complex fuzzy matching algorithms
 - False positives from similar names
 
-**MTG Scanner uses collector numbers instead:**
+**MTG Scan uses collector numbers instead:**
 - ✅ **Language Independent**: Collector numbers are standardized globally
 - ✅ **Exact Matching**: No fuzzy search needed - precise API lookups
 - ✅ **Better OCR Target**: Simple numbers are easier to recognize than stylized text  
@@ -325,7 +325,7 @@ Ask yourself:
 
 ## ⚠️ Disclaimer
 
-**MTG Scanner** is an **unofficial fan project** created by the community for the community.
+**MTG Scan** is an **unofficial fan project** created by the community for the community.
 
 ### Legal Disclaimers
 
@@ -398,7 +398,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ### ❤️ **Support the Project**
 - **[GitHub Sponsors](https://github.com/sponsors/grimbixcode)** - Support development and maintenance
-- **⭐ Star the repo** - Help others discover MTG Scanner
+- **⭐ Star the repo** - Help others discover MTG Scan
 - **Share your collection exports** - Help test compatibility with other tools
 - **Contribute code** - PRs welcome following the simplicity-first principle
 
