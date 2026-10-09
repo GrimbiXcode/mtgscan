@@ -1,4 +1,4 @@
-// Simple MTG Scanner - Main Application
+// Simple MTG Scan - Main Application
 import { cleanOCRText, scoreCollectorNumberResult, parseCollectorNumber, mapLanguageCode, getLanguageDisplayName } from './recognition/parsing.js';
 import { generateDetectionVariants, drawLocatorOverview, MAX_CANDIDATES } from './recognition/pipeline.js';
 import { locateCollectorTextBlocks } from './recognition/textLocator.js';
