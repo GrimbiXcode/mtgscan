@@ -2,236 +2,360 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MTG Scanner - Simple Version</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0E2A2C">
+    <title>MTG Scanner</title>
+    <link rel="preload" href="/fonts/karla-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/fonts/marcellus-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="app">
-        <!-- Notification Container -->
-        <div id="notificationContainer" class="notification-container"></div>
+    <!-- Icon sprite: <svg class="icon"><use href="#i-…"></use></svg> -->
+    <svg xmlns="http://www.w3.org/2000/svg" hidden>
+        <symbol id="i-brand" viewBox="0 0 32 32"><circle cx="16" cy="16" r="13"/><circle cx="16" cy="16" r="8" stroke-dasharray="2 2.2"/><circle cx="16" cy="16" r="3"/><path d="M16 3v5M16 24v5M3 16h5M24 16h5"/></symbol>
+        <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="4"/></symbol>
+        <symbol id="i-image" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 16l5-5 4 4 3-3 4 4"/></symbol>
+        <symbol id="i-flash" viewBox="0 0 24 24"><path d="M13 3L5 14h6l-1 7 8-11h-6z"/></symbol>
+        <symbol id="i-hash" viewBox="0 0 24 24"><path d="M9 4L7 20M17 4l-2 16M4 9h16M3 15h16"/></symbol>
+        <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+        <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+        <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12l4 4 10-10"/></symbol>
+        <symbol id="i-scan" viewBox="0 0 24 24"><path d="M4 8V5h3M17 5h3v3M20 16v3h-3M7 19H4v-3"/></symbol>
+        <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="9" rx="1"/><rect x="3" y="15" width="7" height="6" rx="1"/><rect x="14" y="15" width="7" height="6" rx="1"/></symbol>
+        <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></symbol>
+        <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></symbol>
+        <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 19h16"/></symbol>
+        <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+        <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/></symbol>
+        <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3l2.2 6.3L21 12l-6.8 2.7L12 21l-2.2-6.3L3 12l6.8-2.7z"/></symbol>
+        <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></symbol>
+        <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.5"/></symbol>
+        <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></symbol>
+        <symbol id="i-x-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></symbol>
+        <symbol id="i-question" viewBox="0 0 64 64"><circle cx="32" cy="32" r="27"/><circle cx="32" cy="32" r="19" stroke-dasharray="3 3"/><path d="M27 26a5 5 0 1 1 7 4.6c-1.3.6-2 1.6-2 3V35"/><path d="M32 41v.5"/></symbol>
+        <symbol id="i-filigree" viewBox="0 0 44 44"><path d="M2 42V20A18 18 0 0 1 20 2h22"/><path d="M8 42V22A14 14 0 0 1 22 8h20" opacity="0.6"/><circle cx="20" cy="20" r="3"/></symbol>
+    </svg>
 
-        <header>
-            <h1>🎴 MTG Scanner</h1>
-            <div class="disclaimer">
-                <p class="disclaimer-text">
-                    ⚠️ <strong>Inoffizielles Fan-Projekt</strong> • Keine Verbindung zu Wizards of the Coast oder Hasbro
-                </p>
+    <div class="app">
+        <div id="notificationContainer" class="notification-container" aria-live="polite"></div>
+
+        <header class="app-header">
+            <div class="brand">
+                <svg class="brand-mark" aria-hidden="true"><use href="#i-brand"></use></svg>
+                <div class="brand-text">
+                    <span class="brand-name">MTG Scanner</span>
+                    <span class="brand-sub">Sammlernummer-Scanner</span>
+                </div>
+            </div>
+            <div class="collection-chip">
+                <label for="collectionSelect" class="visually-hidden">Aktive Sammlung</label>
+                <select id="collectionSelect"></select>
+                <svg class="icon" aria-hidden="true"><use href="#i-chevron"></use></svg>
             </div>
         </header>
 
-        <main>
-            <!-- Camera Section -->
-            <section id="cameraSection" class="camera-section">
-                <!-- Start camera controls (always visible) -->
-                <div class="start-camera-controls">
-                    <button id="startCamera" class="btn primary">📷 Kamera starten</button>
-                    <div class="upload-divider">oder</div>
-                    <input type="file" id="fileInput" accept="image/*" hidden>
-                    <button id="uploadCard" class="btn secondary">📁 Bild hochladen</button>
-                </div>
+        <main class="views">
+            <!-- Scan view -->
+            <section id="scanView" class="view" aria-label="Scannen">
+                <div id="stage" class="stage" data-state="idle">
+                    <svg class="stage-ornament tl" aria-hidden="true"><use href="#i-filigree"></use></svg>
+                    <svg class="stage-ornament tr" aria-hidden="true"><use href="#i-filigree"></use></svg>
+                    <svg class="stage-ornament bl" aria-hidden="true"><use href="#i-filigree"></use></svg>
+                    <svg class="stage-ornament br" aria-hidden="true"><use href="#i-filigree"></use></svg>
 
-                <!-- Camera container (hidden when camera stopped) -->
-                <div id="cameraContainer" class="camera-container" hidden>
-                    <video id="video" autoplay playsinline></video>
-                    <div class="alignment-grid">
-                        <div class="grid-lines horizontal">
-                            <div class="grid-line"></div>
-                            <div class="grid-line"></div>
-                            <div class="grid-line"></div>
-                        </div>
-                        <div class="grid-lines vertical">
-                            <div class="grid-line"></div>
-                            <div class="grid-line"></div>
-                            <div class="grid-line"></div>
-                        </div>
-                        <div class="grid-center">
-                            <div class="alignment-hint">📐 Karte orthogonal ausrichten</div>
-                        </div>
+                    <video id="video" class="stage-video" autoplay playsinline muted></video>
+                    <canvas id="stagePreview" class="stage-preview"></canvas>
+
+                    <div class="card-guide" aria-hidden="true">
+                        <span class="card-guide-zone"></span>
                     </div>
-                    <canvas id="canvas" hidden></canvas>
+
+                    <div class="stage-idle">
+                        <svg class="stage-idle-mark" aria-hidden="true"><use href="#i-brand"></use></svg>
+                        <p class="stage-idle-title">Bereit zum Scannen</p>
+                        <p class="stage-idle-text">Starte die Kamera oder lade ein Foto hoch. Die Sammlernummer unten links auf der Karte muss lesbar sein.</p>
+                    </div>
+
+                    <p class="stage-hint">Sammlernummer unten links gut sichtbar halten</p>
+
+                    <button id="flashToggle" class="stage-btn stage-btn-left" aria-label="Licht einschalten" aria-pressed="false" hidden>
+                        <svg class="icon" aria-hidden="true"><use href="#i-flash"></use></svg>
+                    </button>
+                    <button id="stopCamera" class="stage-btn stage-btn-right" aria-label="Kamera ausschalten">
+                        <svg class="icon" aria-hidden="true"><use href="#i-close"></use></svg>
+                    </button>
                 </div>
 
-                <!-- Camera operation buttons (directly under video, hidden when camera stopped) -->
-                <div id="cameraOperationControls" class="camera-operation-controls" hidden>
-                    <button id="captureCard" class="btn success">📸 Karte scannen</button>
-                    <button id="flashToggle" class="btn secondary" hidden>🔦 Blitz</button>
-                    <button id="stopCamera" class="btn danger">⏹️ Stoppen</button>
-                </div>
-
-                <!-- Alignment instructions (hidden when camera stopped) -->
-                <div id="alignmentInstructions" class="alignment-instructions" hidden>
-                    <div class="instruction-text">
-                        📐 <strong>Ausrichtungs-Hilfe:</strong> Richten Sie die Karte parallel zu den Rasterlinien aus. 
-                        Die Kartenkanten sollten den horizontalen und vertikalen Linien folgen.
+                <div class="scan-controls">
+                    <div class="control">
+                        <button id="uploadCard" class="round-btn" aria-label="Foto hochladen">
+                            <svg class="icon" aria-hidden="true"><use href="#i-image"></use></svg>
+                        </button>
+                        <span id="uploadLabel" class="control-label" aria-hidden="true">Foto</span>
+                        <input type="file" id="fileInput" accept="image/*" hidden>
+                    </div>
+                    <div class="control">
+                        <button id="captureCard" class="capture-btn" aria-label="Kamera starten">
+                            <svg class="capture-ring" viewBox="0 0 82 82" aria-hidden="true"><circle cx="41" cy="41" r="35"/></svg>
+                            <svg class="icon" aria-hidden="true"><use href="#i-camera"></use></svg>
+                        </button>
+                        <span id="captureLabel" class="control-label" aria-hidden="true">Kamera starten</span>
+                    </div>
+                    <div class="control">
+                        <button id="manualEntry" class="round-btn" aria-label="Sammlernummer eingeben">
+                            <svg class="icon" aria-hidden="true"><use href="#i-hash"></use></svg>
+                        </button>
+                        <span id="manualLabel" class="control-label" aria-hidden="true">Eingeben</span>
                     </div>
                 </div>
+
+                <section id="processingSection" class="panel processing" hidden>
+                    <div class="processing-head">
+                        <h2>Wird verarbeitet …</h2>
+                        <svg class="processing-spinner" viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="14" stroke-dasharray="3 3"/><circle cx="17" cy="17" r="7"/><path d="M17 3v4M17 27v4M3 17h4M27 17h4"/></svg>
+                    </div>
+                    <div class="progress" role="progressbar" aria-label="Fortschritt" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                        <div id="progressBar" class="progress-bar"></div>
+                    </div>
+                    <ol class="steps">
+                        <li class="step" data-step="locate"><span class="step-dot"><svg class="icon" aria-hidden="true"><use href="#i-check"></use></svg></span>Sammlernummer im Bild finden</li>
+                        <li class="step" data-step="ocr"><span class="step-dot"><svg class="icon" aria-hidden="true"><use href="#i-check"></use></svg></span>Text lesen</li>
+                        <li class="step" data-step="lookup"><span class="step-dot"><svg class="icon" aria-hidden="true"><use href="#i-check"></use></svg></span>Mit Scryfall abgleichen</li>
+                    </ol>
+                    <p id="statusText" class="status-text" aria-live="polite"></p>
+                </section>
+
+                <section id="lastScan" class="panel last-scan" hidden>
+                    <img id="lastScanImage" class="last-scan-image" alt="" crossorigin="anonymous">
+                    <div class="last-scan-info">
+                        <span class="section-label">Zuletzt gescannt</span>
+                        <span id="lastScanName" class="last-scan-name"></span>
+                        <span id="lastScanMeta" class="last-scan-meta"></span>
+                    </div>
+                    <button id="lastScanOpen" class="pill-btn">Bearbeiten</button>
+                </section>
             </section>
 
-            <!-- Debug Section (hidden by default, toggled from footer) -->
-            <section id="debugSection" class="debug-section" hidden>
-                <h3>🔧 Debug-Tools</h3>
-                <div class="debug-images">
-                    <div class="debug-buttons">
-                        <h4>🔍 Automatische Erkennung - Debug Schritte</h4>
+            <!-- Collection view -->
+            <section id="collectionView" class="view" aria-labelledby="currentCollectionName" hidden>
+                <div class="view-head">
+                    <h1 id="currentCollectionName" class="view-title">Meine Sammlung</h1>
+                    <p id="cardCount" class="view-sub">0 Karten</p>
+                </div>
+                <div class="toolbar">
+                    <div class="search-field">
+                        <svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg>
+                        <label for="collectionSearch" class="visually-hidden">Karten durchsuchen</label>
+                        <input type="search" id="collectionSearch" placeholder="Karten durchsuchen …" autocomplete="off">
+                    </div>
+                    <button id="exportCollection" class="pill-btn">
+                        <svg class="icon" aria-hidden="true"><use href="#i-download"></use></svg>
+                        Exportieren
+                    </button>
+                    <button id="clearCollection" class="pill-btn pill-danger">
+                        <svg class="icon" aria-hidden="true"><use href="#i-trash"></use></svg>
+                        Leeren
+                    </button>
+                </div>
+
+                <div id="collectionEmpty" class="empty-state" hidden>
+                    <svg class="empty-mark" aria-hidden="true"><use href="#i-grid"></use></svg>
+                    <p class="empty-title">Noch keine Karten</p>
+                    <p class="empty-text">Scanne deine erste Karte – sie landet dann hier.</p>
+                    <button class="btn btn-primary" data-goto="scan">Zum Scanner</button>
+                </div>
+                <p id="searchEmpty" class="search-empty" hidden>Keine Karte passt zur Suche.</p>
+
+                <ul id="cardList" class="card-grid"></ul>
+            </section>
+
+            <!-- Workshop view -->
+            <section id="workshopView" class="view" aria-labelledby="workshopTitle" hidden>
+                <div class="view-head">
+                    <h1 id="workshopTitle" class="view-title">Werkstatt</h1>
+                    <p class="view-sub">Sammlungen, Werkzeuge und Rechtliches</p>
+                </div>
+
+                <section class="ws-section" aria-labelledby="collectionsHeading">
+                    <h2 id="collectionsHeading" class="section-label">Sammlungen</h2>
+                    <form id="createCollectionForm" class="inline-form">
+                        <label for="newCollectionName" class="visually-hidden">Name der neuen Sammlung</label>
+                        <input type="text" id="newCollectionName" placeholder="Neue Sammlung …" maxlength="50" autocomplete="off">
+                        <button type="submit" id="createCollectionBtn" class="btn btn-primary">Erstellen</button>
+                    </form>
+                    <ul id="collectionsList" class="list-panel"></ul>
+                </section>
+
+                <section class="ws-section" aria-labelledby="toolsHeading">
+                    <h2 id="toolsHeading" class="section-label">Werkzeuge</h2>
+                    <div class="list-panel switch-row">
+                        <div class="switch-text">
+                            <span id="debugToggleLabel" class="switch-title">Debug-Werkzeuge</span>
+                            <span class="switch-sub">Zwischenbilder und OCR-Details des letzten Scans</span>
+                        </div>
+                        <button id="toggleDebug" class="switch" role="switch" aria-checked="false" aria-labelledby="debugToggleLabel">
+                            <span class="switch-knob"></span>
+                        </button>
+                    </div>
+
+                    <div id="debugSection" class="debug-panel" hidden>
                         <div class="debug-button-grid">
-                            <button onclick="mtgScanner.showCapturedImage()" class="btn small">📷 Original</button>
-                            <button onclick="mtgScanner.showLocatorImage()" class="btn small">🔎 Textsuche</button>
-                            <button onclick="mtgScanner.showTextAreaImage()" class="btn small">📝 Textbereich</button>
-                            <button onclick="mtgScanner.showFinalImage()" class="btn small">🎯 Final</button>
+                            <button class="pill-btn" data-debug="captured">Original</button>
+                            <button class="pill-btn" data-debug="locator">Textsuche</button>
+                            <button class="pill-btn" data-debug="textarea">Textbereich</button>
+                            <button class="pill-btn" data-debug="final">Final</button>
+                            <button class="pill-btn" data-debug="ocr">OCR-Details</button>
                         </div>
-                        <div class="debug-ocr-section">
-                            <h5>🔍 OCR-Resultate</h5>
-                            <button onclick="mtgScanner.showOCRResults()" class="btn small">📝 OCR Details</button>
-                        </div>
-                        <div class="debug-stats" id="debugStats">
-                            <h5>🔧 Erkennungs-Parameter</h5>
-                            <div id="debugStatsContent">Führen Sie einen Scan durch, um Debug-Informationen zu sehen</div>
+                        <div id="debugStatsContent" class="debug-stats">Führe einen Scan durch, um Debug-Informationen zu sehen.</div>
+                        <div id="debugImageDisplay" class="debug-image-display" hidden>
+                            <div class="debug-image-head">
+                                <h3 id="debugImageTitle">Debug-Bild</h3>
+                                <button id="debugImageClose" class="icon-btn" aria-label="Debug-Bild schließen">
+                                    <svg class="icon" aria-hidden="true"><use href="#i-close"></use></svg>
+                                </button>
+                            </div>
+                            <div id="debugImageInfo" class="debug-image-info"></div>
+                            <img id="debugImage" alt="Debug-Bild des letzten Scans" src="">
                         </div>
                     </div>
-                    <div class="debug-image-display" id="debugImageDisplay" hidden>
-                        <h6 id="debugImageTitle">Debug Image</h6>
-                        <div class="debug-image-info" id="debugImageInfo"></div>
-                        <img id="debugImage" alt="Debug Image" src="">
-                        <button onclick="mtgScanner.hideDebugImage()" class="btn small">✕ Close</button>
-                    </div>
-                </div>
-            </section>
+                </section>
 
-            <!-- Processing Section -->
-            <section id="processingSection" class="processing-section" hidden>
-                <h3>🔍 Verarbeitung...</h3>
-                <div class="progress">
-                    <div class="progress-bar" id="progressBar"></div>
-                </div>
-                <div id="statusText">Bild wird verarbeitet...</div>
-            </section>
-
-            <!-- Collection Section -->
-            <section id="collectionSection" class="collection-section">
-                <div class="collection-header">
-                    <h3>📚 <span id="currentCollectionName">Meine Sammlung</span> (<span id="cardCount">0</span>)</h3>
-                    <div class="collection-selector">
-                        <select id="collectionSelect" class="collection-dropdown">
-                            <!-- Options will be populated dynamically -->
-                        </select>
+                <section class="ws-section" aria-labelledby="aboutHeading">
+                    <h2 id="aboutHeading" class="section-label">Über</h2>
+                    <div class="about-links">
+                        <a href="/privacy.html">Datenschutz</a>
+                        <a href="/terms.html">Nutzungsbedingungen</a>
+                        <a href="/imprint.html">Impressum</a>
+                        <a href="/legal-en.html" lang="en">English</a>
+                        <a href="https://github.com/grimbixcode/mtgscan" target="_blank" rel="noopener noreferrer">Quellcode auf GitHub</a>
                     </div>
-                </div>
-                <div class="collection-controls">
-                    <button id="manageCollectionsBtn" class="btn secondary">📚 Sammlungen verwalten</button>
-                    <button id="exportCollection" class="btn">💾 Exportieren</button>
-                    <button id="clearCollection" class="btn danger">🗑️ Leeren</button>
-                </div>
-                <div id="cardList" class="card-list"></div>
+                    <p class="about-text">Inoffizielles Fan-Projekt, keine Verbindung zu Wizards of the Coast, Magic: The Gathering oder Hasbro. Kartendaten von Scryfall.</p>
+                </section>
             </section>
         </main>
 
-        <footer class="app-footer">
-            <div class="footer-content">
-                <p class="footer-text">
-                    🔓 <strong>Open Source:</strong>
-                    <a href="https://github.com/grimbixcode/mtgscan" target="_blank" rel="noopener noreferrer" class="github-link">
-                        📂 View on GitHub
-                    </a>
-                </p>
-                <div class="footer-actions">
-                    <button id="toggleDebug" class="btn small">🛠️ Debug ein-/ausblenden</button>
-                </div>
-                <p class="footer-subtitle">Simple • Focused • Language Independent</p>
-                <p class="footer-disclaimer">
-                    ⚠️ Inoffizielles Fan-Projekt • Keine Verbindung zu Wizards of the Coast, Magic: The Gathering oder Hasbro • Alle Kartendaten von Scryfall API
-                </p>
-                <div class="footer-legal">
-                    <a href="/privacy.html" class="legal-link">🔐 Datenschutz</a>
-                    <span class="separator">•</span>
-                    <a href="/terms.html" class="legal-link">📋 Nutzungsbedingungen</a>
-                    <span class="separator">•</span>
-                    <a href="/imprint.html" class="legal-link">📄 Impressum</a>
-                    <span class="separator">•</span>
-                    <a href="/legal-en.html" class="legal-link">🇺🇸 English</a>
-                </div>
-            </div>
-        </footer>
+        <nav class="tab-bar" aria-label="Hauptnavigation">
+            <button class="tab" data-view="scan" aria-current="page">
+                <svg class="icon" aria-hidden="true"><use href="#i-scan"></use></svg>
+                <span>Scannen</span>
+            </button>
+            <button class="tab" data-view="collection">
+                <svg class="icon" aria-hidden="true"><use href="#i-grid"></use></svg>
+                <span>Sammlung</span>
+            </button>
+            <button class="tab" data-view="workshop">
+                <svg class="icon" aria-hidden="true"><use href="#i-gear"></use></svg>
+                <span>Werkstatt</span>
+            </button>
+        </nav>
     </div>
 
-    <!-- Collection Management Modal -->
-    <div id="collectionModal" class="modal-overlay" hidden>
-        <div class="modal-content collection-modal">
-            <div class="modal-header">
-                <h3>📚 Sammlungen verwalten</h3>
-                <button id="collectionModalCloseBtn" class="modal-close" aria-label="Modal schließen">✕</button>
+    <!-- Card sheet: scan result, or collector-number entry when nothing was found -->
+    <dialog id="cardModal" class="sheet" aria-labelledby="sheetTitle">
+        <div class="sheet-top">
+            <span class="sheet-grabber" aria-hidden="true"></span>
+            <button id="modalCloseBtn" class="icon-btn" aria-label="Schließen">
+                <svg class="icon" aria-hidden="true"><use href="#i-close"></use></svg>
+            </button>
+        </div>
+
+        <div id="sheetFound" class="sheet-body">
+            <div class="sheet-card">
+                <img id="modalCardImage" class="sheet-card-image" alt="" crossorigin="anonymous">
+                <div class="sheet-card-info">
+                    <h2 id="sheetTitle" class="sheet-card-name"></h2>
+                    <span id="modalCardSet" class="sheet-card-meta"></span>
+                    <span id="modalCardLanguage" class="sheet-card-meta"></span>
+                    <span id="modalCollectorNumber" class="mono-chip"></span>
+                </div>
             </div>
-            <div class="modal-body">
-                <!-- Create New Collection -->
-                <div class="collection-create-section">
-                    <h4>➕ Neue Sammlung erstellen</h4>
-                    <div class="input-group">
-                        <input type="text" id="newCollectionName" placeholder="Name der neuen Sammlung..." maxlength="50">
-                        <button id="createCollectionBtn" class="btn primary">Erstellen</button>
-                    </div>
+
+            <div id="modalConfidenceBadge" class="confidence-hint" hidden>
+                <svg class="gauge" viewBox="0 0 52 32" aria-hidden="true"><path class="gauge-track" d="M4 28A22 22 0 0 1 48 28"/><path id="confidenceGauge" class="gauge-fill" d="M4 28A22 22 0 0 1 26 6"/></svg>
+                <div class="confidence-text">
+                    <strong id="confidenceTitle">Mittlere Erkennungssicherheit</strong>
+                    <span>Bitte Sammlernummer kurz prüfen.</span>
                 </div>
-                
-                <!-- Collections List -->
-                <div class="collections-list-section">
-                    <h4>📂 Vorhandene Sammlungen</h4>
-                    <div id="collectionsList" class="collections-list">
-                        <!-- Collections will be populated here -->
-                    </div>
+                <button id="confidenceFix" class="link-btn">Korrigieren</button>
+            </div>
+
+            <div class="field-group">
+                <span id="finishLabel" class="section-label">Ausführung</span>
+                <div class="segmented" role="group" aria-labelledby="finishLabel">
+                    <button id="finishNormal" aria-pressed="true">Normal</button>
+                    <button id="finishFoil" aria-pressed="false">
+                        <svg class="icon" aria-hidden="true"><use href="#i-sparkle"></use></svg>
+                        Foil
+                    </button>
                 </div>
+            </div>
+
+            <div class="field-group">
+                <div class="field-row">
+                    <span class="section-label">In der Sammlung</span>
+                    <span class="prev-quantity">vorher: <span id="previousQuantity">0</span></span>
+                </div>
+                <div class="stepper-lg">
+                    <button id="decreaseQuantity" aria-label="Ein Exemplar entfernen">−</button>
+                    <span class="stepper-value">
+                        <output id="currentQuantity" aria-live="polite">0</output>
+                        <span id="quantityDelta" class="quantity-delta"></span>
+                    </span>
+                    <button id="increaseQuantity" class="stepper-plus" aria-label="Ein Exemplar hinzufügen">+</button>
+                </div>
+            </div>
+
+            <div class="sheet-actions">
+                <button id="backToScannerBtn" class="btn btn-dark btn-block">
+                    <svg class="icon" aria-hidden="true"><use href="#i-check"></use></svg>
+                    <span id="sheetPrimaryLabel">Hinzufügen</span>
+                </button>
             </div>
         </div>
-    </div>
 
-    <!-- Card Modal -->
-    <div id="cardModal" class="modal-overlay" hidden>
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="modalCardName">Card Name</h3>
-                <button id="modalCloseBtn" class="modal-close" aria-label="Close modal">✕</button>
+        <div id="manualCorrectionSection" class="sheet-body" hidden>
+            <div class="correction-head">
+                <svg class="correction-mark" aria-hidden="true"><use href="#i-question"></use></svg>
+                <h2 id="correctionTitle" class="correction-title">Karte nicht gefunden</h2>
+                <p id="correctionText" class="correction-text">Die Sammlernummer war nicht eindeutig lesbar. Prüfe sie und suche erneut.</p>
             </div>
-            <div class="modal-body">
-                <div class="modal-card-display">
-                    <img id="modalCardImage" alt="Card Image" class="modal-card-image" src="">
-                    <div class="modal-card-info">
-                        <p id="modalCardSet" class="modal-card-set">Set Name</p>
-                        <p id="modalCardLanguage" class="modal-card-language">🌍 Language: <span id="modalLanguageText">English</span></p>
-                        <p id="modalConfidenceBadge" class="modal-confidence-badge" hidden></p>
 
-                        <!-- Manual Correction Section (shown only when the collector number could not be resolved) -->
-                        <div id="manualCorrectionSection" class="manual-correction-section" hidden>
-                            <label for="manualCollectorInput">Sammlernummer korrigieren:</label>
-                            <input type="text" id="manualCollectorInput" placeholder="z.B. U 0125 FDN DE">
-                            <button id="manualRetryBtn" class="btn primary">🔍 Suchen</button>
-                        </div>
-
-                        <!-- Foil Toggle Section -->
-                        <div class="foil-toggle-section">
-                            <button id="foilToggleBtn" class="foil-toggle-btn" aria-label="Toggle foil status">
-                                <span class="foil-toggle-icon">✨</span>
-                                <span id="foilToggleText">Normal Card</span>
-                            </button>
-                        </div>
-
-                        <div class="quantity-section">
-                            <h4>Quantity in Collection</h4>
-                            <div id="previousQuantityInfo" class="previous-quantity-info">
-                                <span class="previous-quantity-label">Vorherige Anzahl:</span>
-                                <span id="previousQuantity" class="previous-quantity-value">0</span>
-                            </div>
-                            <div class="quantity-controls">
-                                <button id="decreaseQuantity" class="quantity-btn decrease" aria-label="Decrease quantity">−</button>
-                                <span id="currentQuantity" class="quantity-display">0</span>
-                                <button id="increaseQuantity" class="quantity-btn increase" aria-label="Increase quantity">+</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            <div id="correctionPreview" class="read-preview" hidden>
+                <span class="section-label">Gelesener Ausschnitt</span>
+                <img id="correctionPreviewImage" alt="Ausschnitt des Fotos, in dem die Sammlernummer gesucht wurde">
+                <p id="correctionTried" class="read-tried"></p>
             </div>
-            <div class="modal-footer">
-                <button id="backToScannerBtn" class="btn primary">📷 Back to Scanner</button>
-            </div>
+
+            <form id="manualCorrectionForm" class="field-group">
+                <label for="manualCollectorInput" class="section-label">Sammlernummer</label>
+                <input type="text" id="manualCollectorInput" class="mono-input" placeholder="z. B. U 0125 FDN DE" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="search" aria-describedby="manualCollectorHint">
+                <p id="manualError" class="field-error" role="alert" hidden></p>
+                <p id="manualCollectorHint" class="field-hint">Set und Nummer genügen, z. B. <span class="mono">FDN 125</span>. Mit Sprache: <span class="mono">U 0125 FDN DE</span></p>
+                <button type="submit" id="manualRetryBtn" class="btn btn-dark btn-block">
+                    <svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg>
+                    Suchen
+                </button>
+            </form>
+            <button id="correctionRescan" class="btn btn-outline-dark btn-block">Neu scannen</button>
         </div>
-    </div>
+    </dialog>
+
+    <!-- Confirmation / text input dialog (replaces confirm() and prompt()) -->
+    <dialog id="confirmDialog" class="dialog" aria-labelledby="confirmTitle">
+        <form id="confirmForm" method="dialog">
+            <h2 id="confirmTitle" class="dialog-title"></h2>
+            <p id="confirmMessage" class="dialog-text"></p>
+            <div id="confirmInputWrap" class="field-group" hidden>
+                <label for="confirmInput" id="confirmInputLabel" class="section-label">Name</label>
+                <input type="text" id="confirmInput" maxlength="50" autocomplete="off">
+            </div>
+            <!-- OK comes first in the DOM so Enter in the input confirms; CSS shows it on the right -->
+            <div class="dialog-actions">
+                <button type="submit" value="ok" id="confirmOk" class="btn btn-primary">OK</button>
+                <button type="submit" value="cancel" class="btn btn-ghost">Abbrechen</button>
+            </div>
+        </form>
+    </dialog>
 
     <script type="module" src="src/main.js"></script>
 </body>
